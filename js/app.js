@@ -23,18 +23,16 @@ const MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun',
 
 function periodNavHTML(screen) {
   const onMes = screen === 'resumen' ? 'selMesResumen' : 'selMesMov';
-  const pills = MESES_CORTO.slice(1).map((n, i) => {
+  const opts = MESES.slice(1).map((n, i) => {
     const mes = i + 1;
-    return `<button class="mes-pill${mes === state.mes ? ' mes-pill-active' : ''}" onclick="${onMes}(${mes})">${n}</button>`;
+    return `<option value="${mes}"${mes === state.mes ? ' selected' : ''}>${n}</option>`;
   }).join('');
   return `
     <div class="period-nav">
-      <div class="year-row">
-        <button class="nav-btn-sm" onclick="prevAnio('${screen}')">◀</button>
-        <span class="year-label">${state.anio}</span>
-        <button class="nav-btn-sm" onclick="nextAnio('${screen}')">▶</button>
-      </div>
-      <div class="mes-grid">${pills}</div>
+      <button class="nav-btn-sm" onclick="prevAnio('${screen}')">◀</button>
+      <select class="mes-select" onchange="${onMes}(parseInt(this.value))">${opts}</select>
+      <span class="year-label">${state.anio}</span>
+      <button class="nav-btn-sm" onclick="nextAnio('${screen}')">▶</button>
     </div>`;
 }
 

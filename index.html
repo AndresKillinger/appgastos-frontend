@@ -109,23 +109,25 @@
     .tab-btn.active { color: var(--gold); }
     .tab-btn.active .icon { filter: drop-shadow(0 0 4px var(--gold)); }
 
-    /* ── Period nav (año + grilla meses) ── */
-    .period-nav { margin-bottom: 10px; }
-    .year-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 6px; }
-    .year-label { font-family: var(--fp); font-size: 11px; color: var(--gold); min-width: 52px; text-align: center; }
+    /* ── Period nav (dropdown mes + flechas año) ── */
+    .period-nav {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 12px; justify-content: center;
+    }
+    .year-label { font-family: var(--fp); font-size: 10px; color: var(--gold); min-width: 42px; text-align: center; }
     .nav-btn-sm {
       background: var(--surface2); border: 2px solid var(--border);
-      color: var(--text); font-size: 14px; width: 32px; height: 32px; cursor: pointer; line-height: 1;
+      color: var(--text); font-size: 14px; width: 34px; height: 40px; cursor: pointer; line-height: 1; flex-shrink: 0;
     }
     .nav-btn-sm:active { transform: translate(1px,1px); }
-    .mes-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
-    .mes-pill {
-      background: var(--surface); border: 1px solid var(--border);
-      color: var(--muted); font-family: var(--fp); font-size: 6px;
-      padding: 7px 2px; cursor: pointer; text-align: center;
+    .mes-select {
+      flex: 1; background: var(--surface2); border: 2px solid var(--border-hi);
+      color: var(--gold); font-family: var(--fp); font-size: 9px;
+      padding: 8px 10px; cursor: pointer; outline: none;
+      -webkit-appearance: none; appearance: none;
+      text-align: center; max-width: 200px;
     }
-    .mes-pill-active { background: var(--surface2); border-color: var(--gold); color: var(--gold); text-shadow: 0 0 4px var(--gold); }
-    .mes-pill:active { opacity: .7; }
+    .mes-select:focus { border-color: var(--gold); }
 
     /* ── Total card ── */
     .total-card {
