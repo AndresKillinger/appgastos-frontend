@@ -209,13 +209,23 @@ async function loadResumen() {
       ? (() => {
           const mesesConDatos = stackData.meses.filter(m => parseInt(m.total) > 0);
           const maxTotal = Math.max(1, ...mesesConDatos.map(m => parseInt(m.total)));
+          // Altura aprox del area de barras: 200px chart - ~22px total - ~18px label = ~160px
+          const BAR_AREA_PX = 160;
           return mesesConDatos.map(m => {
             const isActual = m.mes === mesActual;
             const pct = Math.round((parseInt(m.total) / maxTotal) * 100);
             const segs = m.categorias.map(c => {
+              const valor = parseInt(c.total);
               const info = stackData.categorias[String(c.categoria_id)];
               const color = pickColor(c.categoria_id, info?.color);
-              return `<div class="vstack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${info?.nombre||'Sin cat'}: ${fmt(c.total)}"></div>`;
+              const segHeight = (valor / maxTotal) * BAR_AREA_PX;
+              const showName = segHeight >= 18;
+              const showBoth = segHeight >= 30;
+              const nombre = info?.nombre || 'Sin cat';
+              const inner = showBoth
+                ? `<span class="vstack-seg-name">${nombre}</span><span class="vstack-seg-amt">${fmtShort(valor)}</span>`
+                : showName ? `<span class="vstack-seg-name">${nombre}</span>` : '';
+              return `<div class="vstack-seg" style="flex:${valor};background:${color}" title="${nombre}: ${fmt(valor)}">${inner}</div>`;
             }).join('');
             return `
               <div class="vstack-col${isActual?' vstack-col-active':''}" onclick="irAMes(${m.mes})">
@@ -238,7 +248,6 @@ async function loadResumen() {
             <span class="vstack-legend-item">
               <span class="vstack-legend-dot" style="background:${c._color};color:${c._color}"></span>
               <span class="vstack-legend-name">${c.nombre}</span>
-              <span class="vstack-legend-amt">${fmtShort(c.total)}</span>
             </span>`).join('')
       : '';
 
