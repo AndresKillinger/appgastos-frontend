@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, createCategory } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -41,9 +41,10 @@ async function loadResumen() {
   const el = $('resumen-content');
   el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
   try {
-    const [d, yearly] = await Promise.all([
+    const [d, yearly, stackData] = await Promise.all([
       getSummary(state.anio, state.mes),
       getYearlySummary(state.anio),
+      getYearlyCategoryBreakdown(state.anio),
     ]);
 
     const totalGasto = parseInt(d.total_cargos);
@@ -69,7 +70,7 @@ async function loadResumen() {
         </div>`;
     }).join('') || `<div class="empty" style="padding:16px">Sin gastos este mes</div>`;
 
-    // Barras mes a mes
+    // Barras mes a mes simples
     const maxMes = Math.max(1, ...yearly.meses.map(m => parseInt(m.total)));
     const mesActual = state.mes;
     const mesRows = yearly.meses.map(m => {
@@ -84,6 +85,25 @@ async function loadResumen() {
           <span class="mes-row-total">${parseInt(m.total) > 0 ? fmt(m.total) : '—'}</span>
         </div>`;
     }).join('');
+
+    // Gráfico de barras apiladas por categoría y mes
+    const stackRows = stackData.meses
+      .filter(m => parseInt(m.total) > 0)
+      .map(m => {
+        const isActual = m.mes === mesActual;
+        const segs = m.categorias.map(c => {
+          const info = stackData.categorias[String(c.categoria_id)];
+          const color = info?.color || '#888888';
+          const nombre = info?.nombre || 'Sin cat';
+          return `<div class="stack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${nombre}: ${fmt(c.total)}"></div>`;
+        }).join('');
+        return `
+          <div class="stack-row ${isActual ? 'stack-row-active' : ''}" onclick="irAMes(${m.mes})">
+            <span class="stack-label">${m.nombre}</span>
+            <div class="stack-bar">${segs}</div>
+            <span class="stack-total">${fmt(m.total)}</span>
+          </div>`;
+      }).join('') || `<div class="empty" style="padding:8px">Sin datos</div>`;
 
     el.innerHTML = `
       <div class="month-nav">
@@ -104,6 +124,14 @@ async function loadResumen() {
 
       <div class="section-title" style="margin-top:20px">📅 ${state.anio} MES A MES</div>
       <div class="mes-list">${mesRows}</div>
+
+      <div class="section-title" style="margin-top:20px">🎯 APILADO POR CATEGORÍA</div>
+      <div class="stack-legend">${
+        Object.values(stackData.categorias).map(c =>
+          `<span class="stack-legend-item"><span class="stack-legend-dot" style="background:${c.color}"></span>${c.nombre}</span>`
+        ).join('')
+      }</div>
+      <div class="stack-chart">${stackRows}</div>
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
@@ -116,64 +144,66 @@ window.irAMes     = (mes) => { state.mes = mes; navigate('movimientos'); };
 window.prevMovMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadMovimientos(); };
 window.nextMovMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadMovimientos(); };
 
-// ── Pantalla: Movimientos (solo cargos) ───────────────────────────────────────
+// ── Pantalla: Movimientos ─────────────────────────────────────────────────────
 async function loadMovimientos() {
-  const el = $('mov-list');
-  el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
-
   const titleEl = $('mov-month-title');
   if (titleEl) titleEl.textContent = `📅 ${MESES[state.mes]} ${state.anio}`;
+
+  $('mov-list').innerHTML = `<div class="loading">🐌 Cargando...</div>`;
 
   const desde   = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
   const lastDay = new Date(state.anio, state.mes, 0).getDate();
   const hasta   = `${state.anio}-${String(state.mes).padStart(2,'0')}-${lastDay}`;
 
   try {
-    const d = await getMovements({
-      desde, hasta,
-      tipo: 'cargo',   // solo cargos, siempre
-      buscar: state.buscar || undefined,
-    });
-
+    const d = await getMovements({ desde, hasta, tipo: 'cargo', buscar: state.buscar || undefined });
     state.movimientosList = d.data;
-
-    const sinCat = d.data.filter(m => !m.categoria_id);
-    const badge = $('badge-sin-cat');
-    if (badge) {
-      badge.textContent = sinCat.length > 0 ? `❓ ${sinCat.length} SIN CATEGORIZAR — TAP AQUÍ` : '';
-      badge.classList.toggle('hidden', sinCat.length === 0);
-    }
-
-    if (!d.data.length) { el.innerHTML = `<div class="empty">Sin gastos este mes</div>`; return; }
-
-    const grupos = {};
-    d.data.forEach(m => { if (!grupos[m.fecha]) grupos[m.fecha]=[]; grupos[m.fecha].push(m); });
-
-    el.innerHTML = Object.entries(grupos)
-      .sort(([a],[b]) => b.localeCompare(a))
-      .map(([fecha, movs]) => `
-        <div class="date-group">
-          <div class="date-header">📅 ${fmtFecha(fecha)}</div>
-          ${movs.map(m => {
-            const cat = m.categoria;
-            const catBadge = cat
-              ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
-              : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
-            return `
-            <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
-              <div class="mov-icon">💥</div>
-              <div class="mov-info">
-                <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
-                <div class="mov-sub">${m.sucursal || ''}</div>
-                ${catBadge}
-              </div>
-              <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
-            </div>`;
-          }).join('')}
-        </div>`).join('');
+    renderMovimientos();
   } catch {
-    el.innerHTML = `<div class="error">Error cargando movimientos</div>`;
+    $('mov-list').innerHTML = `<div class="error">Error cargando movimientos</div>`;
   }
+}
+
+function renderMovimientos() {
+  const el = $('mov-list');
+
+  const sinCat = state.movimientosList.filter(m => !m.categoria_id);
+  const badge = $('badge-sin-cat');
+  if (badge) {
+    badge.textContent = sinCat.length > 0 ? `❓ ${sinCat.length} SIN CATEGORIZAR — TAP AQUÍ` : '';
+    badge.classList.toggle('hidden', sinCat.length === 0);
+  }
+
+  if (!state.movimientosList.length) {
+    el.innerHTML = `<div class="empty">Sin gastos este mes</div>`;
+    return;
+  }
+
+  const grupos = {};
+  state.movimientosList.forEach(m => { if (!grupos[m.fecha]) grupos[m.fecha]=[]; grupos[m.fecha].push(m); });
+
+  el.innerHTML = Object.entries(grupos)
+    .sort(([a],[b]) => b.localeCompare(a))
+    .map(([fecha, movs]) => `
+      <div class="date-group">
+        <div class="date-header">📅 ${fmtFecha(fecha)}</div>
+        ${movs.map(m => {
+          const cat = m.categoria;
+          const catBadge = cat
+            ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
+            : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
+          return `
+          <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
+            <div class="mov-icon">💥</div>
+            <div class="mov-info">
+              <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
+              <div class="mov-sub">${m.sucursal || ''}</div>
+              ${catBadge}
+            </div>
+            <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
+          </div>`;
+        }).join('')}
+      </div>`).join('');
 }
 
 window.onBuscar = e => {
@@ -210,13 +240,28 @@ window.abrirModalDesde = (movId) => {
   $('modal-categoria').classList.remove('hidden');
 };
 
+// Optimistic update: close + update state immediately, sync in background
 window.guardarCategoria = async (movId, catId) => {
+  const mov = state.movimientosList.find(m => m.id === movId);
+  const cat = state.categorias.find(c => c.id === catId);
+  const prevCategoria   = mov?.categoria;
+  const prevCategoriaId = mov?.categoria_id;
+
+  if (mov) {
+    mov.categoria_id = catId;
+    mov.categoria = cat ? { nombre: cat.nombre, icono: cat.icono, color: cat.color, es_gasto: cat.es_gasto } : null;
+  }
+  $('modal-categoria').classList.add('hidden');
+  renderMovimientos();
+  showToast(`✓ ${cat?.nombre || 'Guardado'}`);
+
   try {
     await setCategory(movId, catId);
-    $('modal-categoria').classList.add('hidden');
-    showToast('✓ Categoría guardada');
-    loadMovimientos();
-  } catch { showToast('Error al guardar', true); }
+  } catch {
+    if (mov) { mov.categoria_id = prevCategoriaId; mov.categoria = prevCategoria; }
+    renderMovimientos();
+    showToast('Error al guardar', true);
+  }
 };
 
 window.cerrarModal = () => $('modal-categoria').classList.add('hidden');

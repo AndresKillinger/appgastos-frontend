@@ -35,6 +35,11 @@ export async function getYearlySummary(anio) {
   return r.json();
 }
 
+export async function getYearlyCategoryBreakdown(anio) {
+  const r = await fetch(`${BASE}/summary/yearly/categories?anio=${anio}`);
+  return r.json();
+}
+
 export async function syncEmail() {
   const r = await fetch(`${BASE}/sync`, { method: 'POST' });
   return r.json();
