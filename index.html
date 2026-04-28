@@ -229,6 +229,16 @@
     }
     .cat-badge-sin { color: #ffaa00; border-color: #ffaa00; animation: pulseBorder 1.5s ease-in-out infinite; }
     .mov-sin-cat   { border-color: #ffaa00 !important; }
+    .mov-tc        { border-left: 3px solid var(--accent) !important; }
+
+    /* ── Filtro cuenta ── */
+    .cuenta-bar { display: flex; gap: 6px; margin-bottom: 8px; }
+    .cuenta-btn {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-family: var(--fp); font-size: 6px;
+      padding: 7px 4px; cursor: pointer; text-align: center;
+    }
+    .cuenta-btn.active { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
 
     /* ── Formulario agregar ── */
     .form-card { background: var(--surface); border: 2px solid var(--border-hi); box-shadow: 4px 4px 0 #000; padding: 16px 14px; margin-bottom: 14px; }
@@ -249,9 +259,26 @@
     .btn-primary:active { transform: translate(3px,3px); box-shadow: none; }
     .btn-primary:disabled { opacity: .4; }
     .shortcut-box { background: var(--surface); border: 2px solid var(--border); box-shadow: 4px 4px 0 #000; padding: 16px 14px; }
-    .shortcut-box h2 { font-family: var(--fp); font-size: 9px; color: var(--gold); margin-bottom: 10px; }
-    .shortcut-box p  { font-size: 15px; color: var(--muted); line-height: 1.7; }
-    .shortcut-box code { background: var(--bg); padding: 2px 5px; font-size: 14px; color: var(--blue); border: 1px solid var(--border); }
+    .shortcut-box h2 { font-family: var(--fp); font-size: 9px; color: var(--gold); margin-bottom: 8px; }
+    .shortcut-box p  { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+    .shortcut-box p strong { color: var(--text); }
+    .shortcut-box code { background: var(--bg); padding: 2px 5px; font-size: 13px; color: var(--blue); border: 1px solid var(--border); word-break: break-all; }
+    .shortcut-steps { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+    .step { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--muted); line-height: 1.5; }
+    .step strong { color: var(--text); }
+    .step em { color: var(--gold); font-style: normal; }
+    .step-n {
+      font-family: var(--fp); font-size: 7px; color: var(--bg);
+      background: var(--accent); min-width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
+    }
+    .step-url { flex-direction: column; }
+    .step-url .step-n { margin-bottom: 4px; }
+    .btn-copy {
+      width: 100%; background: var(--surface2); border: 1px solid var(--blue);
+      color: var(--blue); font-family: var(--fp); font-size: 7px; padding: 10px; cursor: pointer;
+    }
+    .btn-copy:active { opacity: .7; }
 
     /* ── Modal categorización ── */
     .modal-overlay {
@@ -397,6 +424,11 @@
       <div class="mov-toolbar">
         <input type="search" class="search-box" placeholder="🔍 Buscar gasto..." oninput="onBuscar(event)">
       </div>
+      <div class="cuenta-bar">
+        <button class="cuenta-btn active" data-cuenta="" onclick="setCuenta('')">🏦+💳 TODOS</button>
+        <button class="cuenta-btn" data-cuenta="cc" onclick="setCuenta('cc')">🏦 CORRIENTE</button>
+        <button class="cuenta-btn" data-cuenta="tc" onclick="setCuenta('tc')">💳 TARJETA</button>
+      </div>
       <div class="sort-bar">
         <span class="sort-label">Orden:</span>
         <button class="sort-btn active" data-orden="fecha_desc" onclick="setOrden('fecha_desc')">📅 FECHA</button>
@@ -411,19 +443,47 @@
     </div>
 
     <div id="screen-agregar" class="screen hidden">
+
+      <!-- Formulario rápido manual -->
       <div class="form-card">
-        <h2>🛒 Agregar gasto</h2>
+        <h2>💳 AGREGAR GASTO TC</h2>
         <form id="form-tc">
           <div class="field"><label>📅 Fecha</label><input type="date" id="input-fecha" required></div>
           <div class="field"><label>📝 Comercio</label><input type="text" id="input-desc" placeholder="Ej: Starbucks" required></div>
-          <div class="field"><label>💰 Monto ($)</label><input type="number" id="input-monto" placeholder="15000" inputmode="numeric" required></div>
-          <button type="submit" class="btn-primary" id="btn-agregar">⚔️ GUARDAR GASTO</button>
+          <div class="field"><label>💰 Monto ($)</label><input type="number" id="input-monto" placeholder="15990" inputmode="numeric" required></div>
+          <button type="submit" class="btn-primary" id="btn-agregar">💳 GUARDAR GASTO TC</button>
         </form>
       </div>
+
+      <!-- Guía iOS Shortcut -->
       <div class="shortcut-box">
-        <h2>⚡ Atajo Apple Pay</h2>
-        <p>Configura un atajo en iOS Shortcuts.<br>Cuando pagues con Apple Pay llama a:<br><code>POST /api/v1/movements/credit-card</code><br>Atajos → Automatización → App → Wallet</p>
+        <h2>⚡ ATAJO AUTOMÁTICO iOS</h2>
+        <p>Configura este atajo una vez y captura <strong>cada pago Apple Pay automáticamente</strong>, sin tocar la app.</p>
+
+        <div class="shortcut-steps">
+          <div class="step"><span class="step-n">1</span><span>Abre <strong>Atajos</strong> → pestaña <strong>Automatización</strong> → <strong>+</strong></span></div>
+          <div class="step"><span class="step-n">2</span><span>Elige <strong>Personal</strong> → <strong>Cuando pago con Apple Pay</strong></span></div>
+          <div class="step"><span class="step-n">3</span><span>Activa <strong>"Ejecutar de inmediato"</strong> (sin confirmar)</span></div>
+          <div class="step"><span class="step-n">4</span><span>Agrega acción: <strong>Obtener detalles de transacción Apple Pay</strong> → <em>Nombre del comercio</em> → guarda como <code>comercio</code></span></div>
+          <div class="step"><span class="step-n">5</span><span>Agrega acción: <strong>Obtener detalles de transacción Apple Pay</strong> → <em>Monto del pago</em> → guarda como <code>monto</code></span></div>
+          <div class="step"><span class="step-n">6</span><span>Agrega acción: <strong>Obtener contenido de URL</strong></span></div>
+          <div class="step step-url">
+            <span class="step-n">7</span>
+            <span>Configura la solicitud:<br>
+              URL: <code id="api-url">https://appgastos-backend.onrender.com/api/v1/movements/apple-pay</code><br>
+              Método: <strong>POST</strong><br>
+              Cuerpo: <strong>JSON</strong><br>
+              &nbsp;• <code>descripcion</code> → Variable <em>comercio</em><br>
+              &nbsp;• <code>monto</code> → Variable <em>monto</em><br>
+              &nbsp;• <code>cuenta</code> → Texto: <em>apple-pay</em>
+            </span>
+          </div>
+          <div class="step"><span class="step-n">8</span><span>Opcional: agrega <strong>Mostrar notificación</strong> → "✓ [comercio] registrado"</span></div>
+        </div>
+
+        <button class="btn-copy" onclick="copiarURL()">📋 COPIAR URL DEL API</button>
       </div>
+
     </div>
 
   </div>

@@ -5,14 +5,26 @@ export async function getSummary(anio, mes) {
   return r.json();
 }
 
-export async function getMovements({ desde, hasta, tipo, buscar, limite = 200 } = {}) {
+export async function getMovements({ desde, hasta, tipo, cuenta, buscar, limite = 200 } = {}) {
   const params = new URLSearchParams();
   if (desde)  params.set('desde', desde);
   if (hasta)  params.set('hasta', hasta);
   if (tipo)   params.set('tipo', tipo);
+  if (cuenta) params.set('cuenta', cuenta);
   if (buscar) params.set('buscar', buscar);
   params.set('limite', limite);
   const r = await fetch(`${BASE}/movements?${params}`);
+  return r.json();
+}
+
+export async function addApplePay({ descripcion, monto, fecha }) {
+  const body = { descripcion, monto: Math.abs(monto), cuenta: 'apple-pay' };
+  if (fecha) body.fecha = fecha;
+  const r = await fetch(`${BASE}/movements/apple-pay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
   return r.json();
 }
 

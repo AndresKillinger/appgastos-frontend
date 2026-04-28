@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
+import { getSummary, getMovements, addCreditCard, addApplePay, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -7,6 +7,7 @@ const state = {
   mes: new Date().getMonth() + 1,
   buscar: '',
   orden: 'fecha_desc',   // 'fecha_desc' | 'monto_desc' | 'monto_asc'
+  cuenta: '',            // '' todos | 'cc' corriente | 'tc' tarjeta
   categorias: [],
   movimientosList: [],
 };
@@ -160,7 +161,7 @@ async function loadMovimientos() {
   const hasta   = `${state.anio}-${String(state.mes).padStart(2,'0')}-${lastDay}`;
 
   try {
-    const d = await getMovements({ desde, hasta, tipo: 'cargo', buscar: state.buscar || undefined });
+    const d = await getMovements({ desde, hasta, tipo: 'cargo', cuenta: state.cuenta || undefined, buscar: state.buscar || undefined });
     state.movimientosList = d.data;
     renderMovimientos();
   } catch {
@@ -168,15 +169,18 @@ async function loadMovimientos() {
   }
 }
 
+const isTarjeta = m => m.cartola_id === 0;
+
 function movCard(m, showDate = false) {
   const cat = m.categoria;
+  const tc = isTarjeta(m);
   const catBadge = cat
     ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
     : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
-  const sub = [m.sucursal, showDate ? fmtFecha(m.fecha) : ''].filter(Boolean).join(' · ');
+  const sub = [tc ? '💳 TC' : null, m.sucursal, showDate ? fmtFecha(m.fecha) : ''].filter(Boolean).join(' · ');
   return `
-    <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
-      <div class="mov-icon">💥</div>
+    <div class="mov-item${!cat ? ' mov-sin-cat' : ''}${tc ? ' mov-tc' : ''}" onclick="abrirModalDesde(${m.id})">
+      <div class="mov-icon">${tc ? '💳' : '💥'}</div>
       <div class="mov-info">
         <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
         ${sub ? `<div class="mov-sub">${sub}</div>` : ''}
@@ -189,9 +193,11 @@ function movCard(m, showDate = false) {
 function renderMovimientos() {
   const el = $('mov-list');
 
-  // Actualiza botones de orden
+  // Actualiza botones de orden y cuenta
   document.querySelectorAll('.sort-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.orden === state.orden));
+  document.querySelectorAll('.cuenta-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.cuenta === state.cuenta));
 
   const sinCat = state.movimientosList.filter(m => !m.categoria_id);
   const badge = $('badge-sin-cat');
@@ -227,7 +233,8 @@ function renderMovimientos() {
   }
 }
 
-window.setOrden = (orden) => { state.orden = orden; renderMovimientos(); };
+window.setOrden  = (orden)  => { state.orden  = orden;  renderMovimientos(); };
+window.setCuenta = (cuenta) => { state.cuenta = cuenta; loadMovimientos(); };
 
 window.onBuscar = e => {
   state.buscar = e.target.value;
@@ -347,17 +354,26 @@ async function submitTarjeta(e) {
   const btn = $('btn-agregar');
   btn.disabled = true; btn.textContent = 'Guardando...';
   try {
-    await addCreditCard({
+    await addApplePay({
       fecha: $('input-fecha').value,
       descripcion: $('input-desc').value,
       monto: parseInt($('input-monto').value),
     });
     $('form-tc').reset();
     $('input-fecha').value = new Date().toISOString().split('T')[0];
-    showToast('🍄 Gasto agregado!');
+    showToast('💳 Gasto TC agregado!');
   } catch { showToast('Error al guardar', true); }
-  finally { btn.disabled = false; btn.textContent = '⚔️ GUARDAR GASTO'; }
+  finally { btn.disabled = false; btn.textContent = '💳 GUARDAR GASTO TC'; }
 }
+
+window.copiarURL = () => {
+  const url = document.getElementById('api-url')?.textContent;
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(
+    () => showToast('📋 URL copiada'),
+    () => showToast('No se pudo copiar', true)
+  );
+};
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
 window.syncData = async () => {
