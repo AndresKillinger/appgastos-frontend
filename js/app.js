@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -218,6 +218,24 @@ function showToast(msg, error = false) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2500);
 }
+
+// ── Sync ──────────────────────────────────────────────────────────────────────
+window.syncData = async () => {
+  const btn = $('btn-sync');
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const d = await syncEmail();
+    const nuevas = (d.procesados || []).filter(p => !p.error).length;
+    showToast(nuevas > 0 ? `${nuevas} cartola(s) nueva(s)` : 'Sin cartolas nuevas');
+    if (nuevas > 0) loadResumen();
+  } catch {
+    showToast('Error al sincronizar', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄';
+  }
+};
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

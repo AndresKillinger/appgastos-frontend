@@ -16,6 +16,11 @@ export async function getMovements({ desde, hasta, tipo, buscar, limite = 200 } 
   return r.json();
 }
 
+export async function syncEmail() {
+  const r = await fetch(`${BASE}/sync`, { method: 'POST' });
+  return r.json();
+}
+
 export async function addCreditCard({ fecha, descripcion, monto }) {
   const r = await fetch(`${BASE}/movements/credit-card`, {
     method: 'POST',
