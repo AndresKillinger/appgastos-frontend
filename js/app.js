@@ -41,47 +41,48 @@ function navigate(tab) {
 // ── Pantalla: Resumen ─────────────────────────────────────────────────────────
 async function loadResumen() {
   const el = $('resumen-content');
-  el.innerHTML = `<div class="loading">Cargando...</div>`;
+  el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
 
   try {
     const d = await getSummary(state.anio, state.mes);
     const balance = parseInt(d.balance);
     const balanceColor = balance >= 0 ? 'text-green-400' : 'text-red-400';
 
+    const monsters = ['🍄','🐌','👾','🦀','🐧','🐛','🦎','🐊','🦂','🐙'];
     el.innerHTML = `
       <div class="month-nav">
-        <button onclick="prevMes()" class="nav-btn">‹</button>
-        <span class="month-title">${MESES[state.mes]} ${state.anio}</span>
-        <button onclick="nextMes()" class="nav-btn">›</button>
+        <button onclick="prevMes()" class="nav-btn">◀</button>
+        <span class="month-title">📅 ${MESES[state.mes]} ${state.anio}</span>
+        <button onclick="nextMes()" class="nav-btn">▶</button>
       </div>
 
       <div class="cards-grid">
         <div class="card card-green">
-          <div class="card-label">Abonos</div>
+          <div class="card-label">💰 DROP</div>
           <div class="card-value">${fmt(d.total_abonos)}</div>
         </div>
         <div class="card card-red">
-          <div class="card-label">Cargos</div>
+          <div class="card-label">💥 DAÑO</div>
           <div class="card-value">${fmt(d.total_cargos)}</div>
         </div>
       </div>
 
       <div class="balance-card">
-        <div class="card-label">Balance del mes</div>
+        <div class="card-label">⚔️ MESOS NETOS</div>
         <div class="card-value ${balanceColor}">${balance >= 0 ? '+' : ''}${fmt(d.balance)}</div>
         <div class="card-sub">${d.cantidad_movimientos} movimientos</div>
       </div>
 
-      <div class="section-title">Top 10 gastos</div>
+      <div class="section-title">👑 TOP 10 BOSS DROPS</div>
       <div class="top-list">
         ${d.top_10_gastos.map((g, i) => `
           <div class="top-item">
-            <span class="top-rank">${i + 1}</span>
+            <span class="top-rank">${monsters[i] || '👾'}</span>
             <div class="top-info">
               <div class="top-desc">${cleanDesc(g.descripcion)}</div>
               <div class="top-date">${fmtFecha(g.fecha)}</div>
             </div>
-            <div class="top-monto">${fmt(g.monto)}</div>
+            <div class="top-monto">-${fmt(g.monto)}</div>
           </div>
         `).join('')}
       </div>
@@ -105,7 +106,7 @@ window.nextMes = () => {
 // ── Pantalla: Movimientos ─────────────────────────────────────────────────────
 async function loadMovimientos() {
   const el = $('mov-list');
-  el.innerHTML = `<div class="loading">Cargando...</div>`;
+  el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
 
   const desde = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
   const lastDay = new Date(state.anio, state.mes, 0).getDate();
@@ -135,11 +136,11 @@ async function loadMovimientos() {
       .sort(([a], [b]) => b.localeCompare(a))
       .map(([fecha, movs]) => `
         <div class="date-group">
-          <div class="date-header">${fmtFecha(fecha)}</div>
+          <div class="date-header">📅 ${fmtFecha(fecha)}</div>
           ${movs.map(m => `
             <div class="mov-item">
-              <div class="mov-icon ${m.tipo === 'abono' ? 'icon-in' : 'icon-out'}">
-                ${m.tipo === 'abono' ? '↓' : '↑'}
+              <div class="mov-icon">
+                ${m.tipo === 'abono' ? '💰' : '💥'}
               </div>
               <div class="mov-info">
                 <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
@@ -227,7 +228,7 @@ window.syncData = async () => {
   try {
     const d = await syncEmail();
     const nuevas = (d.procesados || []).filter(p => !p.error).length;
-    showToast(nuevas > 0 ? `${nuevas} cartola(s) nueva(s)` : 'Sin cartolas nuevas');
+    showToast(nuevas > 0 ? `🍄 ${nuevas} cartola(s) nueva(s)!` : '🐌 Sin cartolas nuevas');
     if (nuevas > 0) loadResumen();
   } catch {
     showToast('Error al sincronizar', true);
