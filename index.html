@@ -286,8 +286,27 @@
     .mov-cargo:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
     .mov-sin-cat { border-color: #ffaa00 !important; }
 
+    /* ── Nueva categoría en modal ── */
+    .btn-nueva-cat {
+      background: transparent; border: 1px solid var(--accent);
+      color: var(--accent); font-size: 7px; padding: 5px 8px; cursor: pointer;
+      font-family: 'Press Start 2P', monospace;
+    }
+    .nueva-cat-fields {
+      display: grid; grid-template-columns: 1fr auto auto auto;
+      gap: 6px; align-items: center; margin-bottom: 6px;
+    }
+    .nc-input {
+      background: var(--bg); border: 1px solid var(--border); color: var(--gold);
+      padding: 6px 8px; font-size: 8px; outline: none;
+      font-family: 'Press Start 2P', monospace; width: 100%;
+    }
+    .nc-icono { width: 44px; text-align: center; }
+    .nc-label { font-size: 7px; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .nc-color { width: 36px; height: 32px; padding: 2px; border: 1px solid var(--border); cursor: pointer; background: none; }
+
     /* ── Fondo decorativo con monstruos ── */
-    .screen { position: relative; overflow: hidden; }
+    .screen { position: relative; overflow-x: hidden; }
     .bg-mob {
       position: absolute; pointer-events: none; z-index: 0;
       image-rendering: pixelated; opacity: 0.07;
@@ -296,7 +315,7 @@
     .bg-mob-zakum  { right: -30px; bottom: 60px;  height: 260px; }
     .bg-mob-slime  { left:  -20px; bottom: 80px;  height: 180px; }
     .bg-mob-slime2 { right: -10px; bottom: 100px; height: 120px; opacity: 0.05; }
-    #resumen-content, #mov-list, .mov-toolbar, .month-input,
+    #resumen-content, #mov-list, .mov-toolbar, .month-nav,
     .badge-sin-cat, .form-card, .shortcut-box { position: relative; z-index: 1; }
 
     /* ── Estados ── */
@@ -356,7 +375,11 @@
     </div>
 
     <div id="screen-movimientos" class="screen hidden">
-      <input type="month" id="mes-selector" class="month-input" onchange="onMesMovChange(event)">
+      <div class="month-nav" style="margin-bottom:10px">
+        <button onclick="prevMovMes()" class="nav-btn">◀</button>
+        <span id="mov-month-title" class="month-title">📅 ...</span>
+        <button onclick="nextMovMes()" class="nav-btn">▶</button>
+      </div>
       <div class="mov-toolbar">
         <input type="search" class="search-box" placeholder="🔍 Buscar gasto..." oninput="onBuscar(event)">
       </div>
@@ -388,7 +411,7 @@
 
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="resumen"><span class="icon">📊</span><span>STATS</span></button>
-    <button class="tab-btn" data-tab="movimientos"><span class="icon">👾</span><span>LOG</span></button>
+    <button class="tab-btn" data-tab="movimientos"><span class="icon">👾</span><span>MOV</span></button>
     <button class="tab-btn" data-tab="agregar"><span class="icon">🛒</span><span>SHOP</span></button>
   </nav>
 
@@ -408,7 +431,19 @@
     <div id="modal-monto" class="modal-monto"></div>
     <div id="modal-fecha" class="modal-fecha"></div>
     <div id="cat-grid" class="cat-grid"></div>
-    <button class="btn-omitir" onclick="omitirCategoria()">Omitir este →</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+      <button class="btn-omitir" style="width:auto;margin-top:0" onclick="omitirCategoria()">Omitir →</button>
+      <button class="btn-nueva-cat" onclick="toggleNuevaCat()">➕ NUEVA CAT</button>
+    </div>
+    <div id="nueva-cat-form" class="hidden" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <div class="nueva-cat-fields">
+        <input id="nc-nombre" class="nc-input" placeholder="Nombre" type="text">
+        <input id="nc-icono" class="nc-input nc-icono" placeholder="🎮" type="text" maxlength="2">
+        <label class="nc-label"><input id="nc-es-gasto" type="checkbox" checked> gasto</label>
+        <input id="nc-color" class="nc-color" type="color" value="#888888">
+      </div>
+      <button class="btn-primary" style="font-size:8px;padding:10px" onclick="guardarNuevaCat()">⚔️ CREAR CATEGORÍA</button>
+    </div>
   </div>
 </div>
 

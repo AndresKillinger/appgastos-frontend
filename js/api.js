@@ -40,6 +40,15 @@ export async function syncEmail() {
   return r.json();
 }
 
+export async function createCategory({ nombre, icono, es_gasto, color }) {
+  const r = await fetch(`${BASE}/categories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre, icono, es_gasto, color }),
+  });
+  return r.json();
+}
+
 export async function addCreditCard({ fecha, descripcion, monto }) {
   const r = await fetch(`${BASE}/movements/credit-card`, {
     method: 'POST',

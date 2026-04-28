@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, createCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -110,14 +110,19 @@ async function loadResumen() {
   }
 }
 
-window.prevMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadResumen(); };
-window.nextMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadResumen(); };
-window.irAMes  = (mes) => { state.mes = mes; navigate('movimientos'); };
+window.prevMes    = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadResumen(); };
+window.nextMes    = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadResumen(); };
+window.irAMes     = (mes) => { state.mes = mes; navigate('movimientos'); };
+window.prevMovMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadMovimientos(); };
+window.nextMovMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadMovimientos(); };
 
 // ── Pantalla: Movimientos (solo cargos) ───────────────────────────────────────
 async function loadMovimientos() {
   const el = $('mov-list');
   el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
+
+  const titleEl = $('mov-month-title');
+  if (titleEl) titleEl.textContent = `📅 ${MESES[state.mes]} ${state.anio}`;
 
   const desde   = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
   const lastDay = new Date(state.anio, state.mes, 0).getDate();
@@ -176,11 +181,6 @@ window.onBuscar = e => {
   clearTimeout(window._buscarTimer);
   window._buscarTimer = setTimeout(loadMovimientos, 400);
 };
-window.onMesMovChange = e => {
-  const [y,m] = e.target.value.split('-');
-  state.anio = parseInt(y); state.mes = parseInt(m);
-  loadMovimientos();
-};
 
 // ── Modal de categorización ───────────────────────────────────────────────────
 window.abrirModalCategoria = () => {
@@ -191,6 +191,7 @@ window.abrirModalCategoria = () => {
 window.abrirModalDesde = (movId) => {
   const mov = state.movimientosList.find(m => m.id === movId);
   if (!mov) return;
+  window._currentMovId = movId;
 
   $('modal-desc').textContent  = cleanDesc(mov.descripcion);
   $('modal-monto').textContent = `-${fmt(mov.monto)}`;
@@ -219,6 +220,31 @@ window.guardarCategoria = async (movId, catId) => {
 };
 
 window.cerrarModal = () => $('modal-categoria').classList.add('hidden');
+
+window.omitirCategoria = () => {
+  const idx = state.movimientosList.findIndex(m => m.id === window._currentMovId);
+  const next = state.movimientosList.slice(idx + 1).find(m => !m.categoria_id);
+  if (next) abrirModalDesde(next.id);
+  else { cerrarModal(); showToast('✓ Todo categorizado'); }
+};
+
+window.toggleNuevaCat = () => $('nueva-cat-form').classList.toggle('hidden');
+
+window.guardarNuevaCat = async () => {
+  const nombre = $('nc-nombre').value.trim();
+  const icono  = $('nc-icono').value.trim() || '❓';
+  const es_gasto = $('nc-es-gasto').checked;
+  const color  = $('nc-color').value;
+  if (!nombre) { showToast('Pon un nombre', true); return; }
+  try {
+    const cat = await createCategory({ nombre, icono, es_gasto, color });
+    state.categorias.push(cat);
+    $('nueva-cat-form').classList.add('hidden');
+    $('nc-nombre').value = '';
+    showToast('✓ Categoría creada');
+    if (window._currentMovId != null) abrirModalDesde(window._currentMovId);
+  } catch { showToast('Error al crear', true); }
+};
 
 // ── Pantalla: Agregar ─────────────────────────────────────────────────────────
 async function submitTarjeta(e) {
@@ -269,9 +295,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => navigate(b.dataset.tab)));
-
-  const mesInput = $('mes-selector');
-  if (mesInput) mesInput.value = `${state.anio}-${String(state.mes).padStart(2,'0')}`;
 
   const fechaInput = $('input-fecha');
   if (fechaInput) fechaInput.value = new Date().toISOString().split('T')[0];
