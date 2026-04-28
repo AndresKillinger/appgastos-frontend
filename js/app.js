@@ -550,7 +550,7 @@ function showToast(msg, error = false) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(()=>{});
 
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => navigate(b.dataset.tab)));

@@ -1,8 +1,8 @@
-const CACHE = 'appgastos-v14';
-const ASSETS = ['/', '/index.html', '/js/api.js', '/js/app.js'];
+const CACHE = 'appgastos-v15';
+const ASSETS = ['./', './index.html', './js/api.js', './js/app.js', './manifest.json'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(()=>null)));
   self.skipWaiting();
 });
 
