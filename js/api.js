@@ -1,4 +1,4 @@
-const BASE = 'https://web-production-713e7.up.railway.app/api/v1';
+const BASE = 'https://appgastos-backend.onrender.com/api/v1';
 
 export async function getSummary(anio, mes) {
   const r = await fetch(`${BASE}/summary?anio=${anio}&mes=${mes}`);
