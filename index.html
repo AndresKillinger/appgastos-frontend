@@ -270,6 +270,24 @@
     }
     .btn-cerrar-modal { background: transparent; border: none; color: var(--muted); font-size: 14px; cursor: pointer; padding: 4px; }
 
+    /* ── Movimientos clickeables ── */
+    .mov-cargo { cursor: pointer; }
+    .mov-cargo:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
+    .mov-sin-cat { border-color: #ffaa00 !important; }
+
+    /* ── Fondo decorativo con monstruos ── */
+    .screen { position: relative; overflow: hidden; }
+    .bg-mob {
+      position: absolute; pointer-events: none; z-index: 0;
+      image-rendering: pixelated; opacity: 0.07;
+      filter: saturate(0.7) brightness(1.2);
+    }
+    .bg-mob-zakum  { right: -30px; bottom: 60px;  height: 260px; }
+    .bg-mob-slime  { left:  -20px; bottom: 80px;  height: 180px; }
+    .bg-mob-slime2 { right: -10px; bottom: 100px; height: 120px; opacity: 0.05; }
+    #resumen-content, #mov-list, .mov-toolbar, .month-input,
+    .badge-sin-cat, .form-card, .shortcut-box { position: relative; z-index: 1; }
+
     /* ── Estados ── */
     .loading, .empty, .error { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 9px; line-height: 2; }
     .error { color: var(--red); }
@@ -315,6 +333,14 @@
   <div class="content">
 
     <div id="screen-resumen" class="screen">
+      <!-- Zakum de fondo -->
+      <img class="bg-mob bg-mob-zakum"
+           src="https://maplestory.io/api/GMS/latest/mob/8800000/render/stand"
+           onerror="this.style.display='none'" alt="">
+      <!-- Slime pequeño esquina superior izquierda -->
+      <img class="bg-mob bg-mob-slime2"
+           src="https://maplestory.io/api/GMS/latest/mob/100/render/stand"
+           onerror="this.style.display='none'" alt="">
       <div id="resumen-content"><div class="loading">🐌 Cargando...</div></div>
     </div>
 
@@ -327,6 +353,10 @@
         </div>
         <input type="search" class="search-box" placeholder="🔍 Buscar..." oninput="onBuscar(event)">
       </div>
+      <!-- Slime de fondo -->
+      <img class="bg-mob bg-mob-slime"
+           src="https://maplestory.io/api/GMS/latest/mob/210100/render/stand"
+           onerror="this.style.display='none'" alt="">
       <button id="badge-sin-cat" class="badge-sin-cat hidden" onclick="abrirModalCategoria()"></button>
       <div id="mov-list"><div class="loading">🐌 Cargando...</div></div>
     </div>
