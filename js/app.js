@@ -21,6 +21,23 @@ const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
 const MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun',
                      'Jul','Ago','Sep','Oct','Nov','Dic'];
 
+function periodNavHTML(screen) {
+  const onMes = screen === 'resumen' ? 'selMesResumen' : 'selMesMov';
+  const pills = MESES_CORTO.slice(1).map((n, i) => {
+    const mes = i + 1;
+    return `<button class="mes-pill${mes === state.mes ? ' mes-pill-active' : ''}" onclick="${onMes}(${mes})">${n}</button>`;
+  }).join('');
+  return `
+    <div class="period-nav">
+      <div class="year-row">
+        <button class="nav-btn-sm" onclick="prevAnio('${screen}')">◀</button>
+        <span class="year-label">${state.anio}</span>
+        <button class="nav-btn-sm" onclick="nextAnio('${screen}')">▶</button>
+      </div>
+      <div class="mes-grid">${pills}</div>
+    </div>`;
+}
+
 function mobImg(mobId, emoji, size = 28) {
   if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
   return `<img src="https://maplestory.io/api/GMS/latest/mob/${mobId}/render/stand"
@@ -114,11 +131,7 @@ async function loadResumen() {
       : '';
 
     el.innerHTML = `
-      <div class="month-nav">
-        <button onclick="prevMes()" class="nav-btn">◀</button>
-        <span class="month-title">📅 ${MESES[state.mes]} ${state.anio}</span>
-        <button onclick="nextMes()" class="nav-btn">▶</button>
-      </div>
+      ${periodNavHTML('resumen')}
 
       <div class="total-card">
         <div class="total-label">💥 GASTO DEL MES</div>
@@ -147,16 +160,18 @@ async function loadResumen() {
   }
 }
 
-window.prevMes    = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadResumen(); };
-window.nextMes    = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadResumen(); };
-window.irAMes     = (mes) => { state.mes = mes; navigate('movimientos'); };
+window.selMesResumen = mes => { state.mes = mes; loadResumen(); };
+window.selMesMov     = mes => { state.mes = mes; loadMovimientos(); };
+window.prevAnio  = screen => { state.anio--; screen === 'resumen' ? loadResumen() : loadMovimientos(); };
+window.nextAnio  = screen => { state.anio++; screen === 'resumen' ? loadResumen() : loadMovimientos(); };
+window.irAMes    = mes  => { state.mes = mes; navigate('movimientos'); };
 window.prevMovMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadMovimientos(); };
 window.nextMovMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadMovimientos(); };
 
 // ── Pantalla: Movimientos ─────────────────────────────────────────────────────
 async function loadMovimientos() {
-  const titleEl = $('mov-month-title');
-  if (titleEl) titleEl.textContent = `📅 ${MESES[state.mes]} ${state.anio}`;
+  const navEl = $('mov-period-nav');
+  if (navEl) navEl.innerHTML = periodNavHTML('mov');
 
   $('mov-list').innerHTML = `<div class="loading">🐌 Cargando...</div>`;
 

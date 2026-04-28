@@ -109,15 +109,23 @@
     .tab-btn.active { color: var(--gold); }
     .tab-btn.active .icon { filter: drop-shadow(0 0 4px var(--gold)); }
 
-    /* ── Month nav ── */
-    .month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .month-title { font-family: var(--fp); font-size: 9px; color: var(--gold); text-shadow: 1px 1px 0 #000; }
-    .nav-btn {
-      background: var(--surface2); border: 2px solid var(--border-hi);
-      box-shadow: 2px 2px 0 #000; color: var(--text); font-size: 18px;
-      width: 40px; height: 40px; cursor: pointer; line-height: 1;
+    /* ── Period nav (año + grilla meses) ── */
+    .period-nav { margin-bottom: 10px; }
+    .year-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 6px; }
+    .year-label { font-family: var(--fp); font-size: 11px; color: var(--gold); min-width: 52px; text-align: center; }
+    .nav-btn-sm {
+      background: var(--surface2); border: 2px solid var(--border);
+      color: var(--text); font-size: 14px; width: 32px; height: 32px; cursor: pointer; line-height: 1;
     }
-    .nav-btn:active { transform: translate(2px,2px); box-shadow: none; }
+    .nav-btn-sm:active { transform: translate(1px,1px); }
+    .mes-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; }
+    .mes-pill {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-family: var(--fp); font-size: 6px;
+      padding: 7px 2px; cursor: pointer; text-align: center;
+    }
+    .mes-pill-active { background: var(--surface2); border-color: var(--gold); color: var(--gold); text-shadow: 0 0 4px var(--gold); }
+    .mes-pill:active { opacity: .7; }
 
     /* ── Total card ── */
     .total-card {
@@ -420,11 +428,7 @@
     </div>
 
     <div id="screen-movimientos" class="screen hidden">
-      <div class="month-nav" style="margin-bottom:10px">
-        <button onclick="prevMovMes()" class="nav-btn">◀</button>
-        <span id="mov-month-title" class="month-title">📅 ...</span>
-        <button onclick="nextMovMes()" class="nav-btn">▶</button>
-      </div>
+      <div id="mov-period-nav"></div>
       <div class="mov-toolbar">
         <input type="search" class="search-box" placeholder="🔍 Buscar gasto..." oninput="onBuscar(event)">
       </div>
