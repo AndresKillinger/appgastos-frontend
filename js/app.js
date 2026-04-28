@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, syncEmail } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -7,6 +7,9 @@ const state = {
   mes: new Date().getMonth() + 1,
   filtroTipo: '',
   buscar: '',
+  categorias: [],
+  sinCategorizar: [],
+  catIdx: 0,
 };
 
 const $ = id => document.getElementById(id);
@@ -25,6 +28,15 @@ const fmtFecha = iso => {
 const MESES = ['', 'Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+// ── Imagen de monstruo con fallback a emoji ───────────────────────────────────
+function mobImg(mobId, emoji, size = 36) {
+  if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
+  return `<img src="https://maplestory.io/api/GMS/latest/mob/${mobId}/render/stand"
+    data-emoji="${emoji}"
+    onerror="this.outerHTML='<span style=font-size:${size}px;line-height:1 class=mob-emoji>${this.dataset.emoji}</span>'"
+    style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated">`;
+}
+
 // ── Navegación ────────────────────────────────────────────────────────────────
 function navigate(tab) {
   state.tab = tab;
@@ -34,7 +46,7 @@ function navigate(tab) {
   document.querySelectorAll('.screen').forEach(s => {
     s.classList.toggle('hidden', s.id !== `screen-${tab}`);
   });
-  if (tab === 'resumen')    loadResumen();
+  if (tab === 'resumen')     loadResumen();
   if (tab === 'movimientos') loadMovimientos();
 }
 
@@ -46,9 +58,10 @@ async function loadResumen() {
   try {
     const d = await getSummary(state.anio, state.mes);
     const balance = parseInt(d.balance);
+    const excluido = parseInt(d.total_excluido || 0);
     const balanceColor = balance >= 0 ? 'text-green-400' : 'text-red-400';
-
     const monsters = ['🍄','🐌','👾','🦀','🐧','🐛','🦎','🐊','🦂','🐙'];
+
     el.innerHTML = `
       <div class="month-nav">
         <button onclick="prevMes()" class="nav-btn">◀</button>
@@ -62,8 +75,9 @@ async function loadResumen() {
           <div class="card-value">${fmt(d.total_abonos)}</div>
         </div>
         <div class="card card-red">
-          <div class="card-label">💥 DAÑO</div>
+          <div class="card-label">💥 DAÑO REAL</div>
           <div class="card-value">${fmt(d.total_cargos)}</div>
+          ${excluido > 0 ? `<div class="card-sub">+${fmt(excluido)} excluido</div>` : ''}
         </div>
       </div>
 
@@ -120,12 +134,14 @@ async function loadMovimientos() {
       buscar: state.buscar || undefined,
     });
 
+    // Detectar sin categorizar
+    checkUncategorized(d.data);
+
     if (!d.data.length) {
       el.innerHTML = `<div class="empty">Sin movimientos</div>`;
       return;
     }
 
-    // Agrupar por fecha
     const grupos = {};
     d.data.forEach(m => {
       if (!grupos[m.fecha]) grupos[m.fecha] = [];
@@ -137,48 +153,28 @@ async function loadMovimientos() {
       .map(([fecha, movs]) => `
         <div class="date-group">
           <div class="date-header">📅 ${fmtFecha(fecha)}</div>
-          ${movs.map(m => `
+          ${movs.map(m => {
+            const cat = m.categoria;
+            const catBadge = cat
+              ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
+              : (m.tipo === 'cargo' ? `<div class="cat-badge cat-badge-sin" onclick="abrirModalDesde(${m.id})">❓ categorizar</div>` : '');
+            return `
             <div class="mov-item">
-              <div class="mov-icon">
-                ${m.tipo === 'abono' ? '💰' : '💥'}
-              </div>
+              <div class="mov-icon">${m.tipo === 'abono' ? '💰' : '💥'}</div>
               <div class="mov-info">
                 <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
                 <div class="mov-sub">${m.sucursal || m.cuenta || ''}</div>
+                ${catBadge}
               </div>
               <div class="mov-monto ${m.tipo === 'abono' ? 'monto-in' : 'monto-out'}">
                 ${m.tipo === 'abono' ? '+' : '-'}${fmt(m.monto)}
               </div>
-            </div>
-          `).join('')}
+            </div>`;
+          }).join('')}
         </div>
       `).join('');
   } catch (e) {
     el.innerHTML = `<div class="error">Error cargando movimientos</div>`;
-  }
-}
-
-// ── Pantalla: Agregar (tarjeta crédito) ──────────────────────────────────────
-async function submitTarjeta(e) {
-  e.preventDefault();
-  const btn = $('btn-agregar');
-  btn.disabled = true;
-  btn.textContent = 'Guardando...';
-
-  try {
-    await addCreditCard({
-      fecha: $('input-fecha').value,
-      descripcion: $('input-desc').value,
-      monto: parseInt($('input-monto').value),
-    });
-    $('form-tc').reset();
-    $('input-fecha').value = new Date().toISOString().split('T')[0];
-    showToast('Gasto agregado');
-  } catch {
-    showToast('Error al guardar', true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Guardar gasto';
   }
 }
 
@@ -204,20 +200,104 @@ window.onMesMovChange = e => {
   loadMovimientos();
 };
 
-// ── Utilidades ────────────────────────────────────────────────────────────────
-function cleanDesc(desc) {
-  return (desc || '')
-    .replace(/^\d{10,}\s*/, '')  // quitar N°DCTO al inicio
-    .replace(/^0+(\d)/, '$1')    // quitar ceros iniciales
-    .trim() || desc;
+// ── Sistema de categorización ─────────────────────────────────────────────────
+function checkUncategorized(movimientos) {
+  state.sinCategorizar = movimientos.filter(m => m.tipo === 'cargo' && !m.categoria_id);
+  const badge = $('badge-sin-cat');
+  if (!badge) return;
+  if (state.sinCategorizar.length > 0) {
+    badge.textContent = `❓ ${state.sinCategorizar.length} SIN CATEGORIZAR`;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
 }
 
-function showToast(msg, error = false) {
-  const t = document.createElement('div');
-  t.className = `toast ${error ? 'toast-error' : 'toast-ok'}`;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.remove(), 2500);
+window.abrirModalCategoria = () => {
+  if (state.sinCategorizar.length === 0) return;
+  state.catIdx = 0;
+  mostrarMovEnModal();
+  $('modal-categoria').classList.remove('hidden');
+};
+
+window.abrirModalDesde = (movId) => {
+  // Abrir modal directamente en un movimiento específico
+  const idx = state.sinCategorizar.findIndex(m => m.id === movId);
+  state.catIdx = idx >= 0 ? idx : 0;
+  mostrarMovEnModal();
+  $('modal-categoria').classList.remove('hidden');
+};
+
+function mostrarMovEnModal() {
+  const mov = state.sinCategorizar[state.catIdx];
+  if (!mov) {
+    $('modal-categoria').classList.add('hidden');
+    loadMovimientos();
+    if (state.tab === 'resumen') loadResumen();
+    return;
+  }
+
+  $('modal-contador').textContent = `${state.catIdx + 1} / ${state.sinCategorizar.length}`;
+  $('modal-desc').textContent = cleanDesc(mov.descripcion);
+  $('modal-monto').textContent = `-${fmt(mov.monto)}`;
+  $('modal-fecha').textContent = `📅 ${fmtFecha(mov.fecha)}`;
+
+  const grid = $('cat-grid');
+  grid.innerHTML = state.categorias.map(cat => `
+    <button class="cat-btn ${cat.es_gasto ? '' : 'cat-no-gasto'}"
+            onclick="seleccionarCategoria(${mov.id}, ${cat.id})"
+            title="${cat.nombre}">
+      <div class="cat-btn-img">${mobImg(cat.mob_id, cat.icono, 32)}</div>
+      <span class="cat-name" style="color:${cat.color}">${cat.nombre}</span>
+    </button>
+  `).join('');
+}
+
+window.seleccionarCategoria = async (movId, catId) => {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  try {
+    await setCategory(movId, catId);
+    state.catIdx++;
+    mostrarMovEnModal();
+  } catch {
+    btn.disabled = false;
+    showToast('Error al guardar', true);
+  }
+};
+
+window.omitirCategoria = () => {
+  state.catIdx++;
+  mostrarMovEnModal();
+};
+
+window.cerrarModal = () => {
+  $('modal-categoria').classList.add('hidden');
+  loadMovimientos();
+};
+
+// ── Pantalla: Agregar (tarjeta crédito) ──────────────────────────────────────
+async function submitTarjeta(e) {
+  e.preventDefault();
+  const btn = $('btn-agregar');
+  btn.disabled = true;
+  btn.textContent = 'Guardando...';
+
+  try {
+    await addCreditCard({
+      fecha: $('input-fecha').value,
+      descripcion: $('input-desc').value,
+      monto: parseInt($('input-monto').value),
+    });
+    $('form-tc').reset();
+    $('input-fecha').value = new Date().toISOString().split('T')[0];
+    showToast('🍄 Gasto agregado!');
+  } catch {
+    showToast('Error al guardar', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚔️ GUARDAR GASTO';
+  }
 }
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
@@ -238,31 +318,44 @@ window.syncData = async () => {
   }
 };
 
+// ── Utilidades ────────────────────────────────────────────────────────────────
+function cleanDesc(desc) {
+  return (desc || '')
+    .replace(/^\d{10,}\s*/, '')
+    .replace(/^0+(\d)/, '$1')
+    .trim() || desc;
+}
+
+function showToast(msg, error = false) {
+  const t = document.createElement('div');
+  t.className = `toast ${error ? 'toast-error' : 'toast-ok'}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2500);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  // Service worker
+document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   }
 
-  // Navegación
   document.querySelectorAll('.tab-btn').forEach(b => {
     b.addEventListener('click', () => navigate(b.dataset.tab));
   });
 
-  // Mes selector en movimientos
   const mesInput = $('mes-selector');
-  if (mesInput) {
-    mesInput.value = `${state.anio}-${String(state.mes).padStart(2,'0')}`;
-  }
+  if (mesInput) mesInput.value = `${state.anio}-${String(state.mes).padStart(2,'0')}`;
 
-  // Fecha por defecto en formulario
   const fechaInput = $('input-fecha');
   if (fechaInput) fechaInput.value = new Date().toISOString().split('T')[0];
 
-  // Form tarjeta
   $('form-tc').addEventListener('submit', submitTarjeta);
 
-  // Pantalla inicial
+  // Cargar categorías antes de navegar
+  try {
+    state.categorias = await getCategories();
+  } catch {}
+
   navigate('resumen');
 });

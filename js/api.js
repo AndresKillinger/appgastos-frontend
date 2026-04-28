@@ -16,6 +16,20 @@ export async function getMovements({ desde, hasta, tipo, buscar, limite = 200 } 
   return r.json();
 }
 
+export async function getCategories() {
+  const r = await fetch(`${BASE}/categories`);
+  return r.json();
+}
+
+export async function setCategory(movId, catId) {
+  const r = await fetch(`${BASE}/movements/${movId}/category`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ categoria_id: catId }),
+  });
+  return r.json();
+}
+
 export async function syncEmail() {
   const r = await fetch(`${BASE}/sync`, { method: 'POST' });
   return r.json();
