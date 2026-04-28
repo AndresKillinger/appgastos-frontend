@@ -30,6 +30,11 @@ export async function setCategory(movId, catId) {
   return r.json();
 }
 
+export async function getYearlySummary(anio) {
+  const r = await fetch(`${BASE}/summary/yearly?anio=${anio}`);
+  return r.json();
+}
+
 export async function syncEmail() {
   const r = await fetch(`${BASE}/sync`, { method: 'POST' });
   return r.json();

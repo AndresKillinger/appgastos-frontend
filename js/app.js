@@ -1,29 +1,28 @@
-import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
   tab: 'resumen',
   anio: new Date().getFullYear(),
   mes: new Date().getMonth() + 1,
-  filtroTipo: '',
   buscar: '',
   categorias: [],
-  movimientosList: [],   // cache para el modal
+  movimientosList: [],
 };
 
 const $ = id => document.getElementById(id);
-
 const fmt = n => '$' + Math.abs(parseInt(n || 0)).toLocaleString('es-CL');
 const fmtFecha = iso => { const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; };
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun',
+                     'Jul','Ago','Sep','Oct','Nov','Dic'];
 
-// Imagen de monstruo con fallback a emoji
-function mobImg(mobId, emoji, size = 36) {
+function mobImg(mobId, emoji, size = 28) {
   if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
   return `<img src="https://maplestory.io/api/GMS/latest/mob/${mobId}/render/stand"
     onerror="this.outerHTML='<span style=font-size:${size}px;line-height:1>${emoji}</span>'"
-    style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated">`;
+    style="width:${size}px;height:${size}px;object-fit:contain;image-rendering:pixelated;flex-shrink:0">`;
 }
 
 // ── Navegación ────────────────────────────────────────────────────────────────
@@ -42,11 +41,49 @@ async function loadResumen() {
   const el = $('resumen-content');
   el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
   try {
-    const d = await getSummary(state.anio, state.mes);
-    const balance = parseInt(d.balance);
-    const excluido = parseInt(d.total_excluido || 0);
-    const balanceColor = balance >= 0 ? 'text-green-400' : 'text-red-400';
-    const monsters = ['🍄','🐌','👾','🦀','🐧','🐛','🦎','🐊','🦂','🐙'];
+    const [d, yearly] = await Promise.all([
+      getSummary(state.anio, state.mes),
+      getYearlySummary(state.anio),
+    ]);
+
+    const totalGasto = parseInt(d.total_cargos);
+    const excluido   = parseInt(d.total_excluido || 0);
+
+    // Barras de categorías
+    const maxCat = Math.max(1, ...d.by_category.map(c => parseInt(c.total)));
+    const catRows = d.by_category.map(c => {
+      const pct = Math.round((parseInt(c.total) / maxCat) * 100);
+      return `
+        <div class="cat-row">
+          <div class="cat-row-icon">${mobImg(c.mob_id, c.icono, 26)}</div>
+          <div class="cat-row-body">
+            <div class="cat-row-header">
+              <span class="cat-row-name" style="color:${c.color}">${c.nombre}</span>
+              <span class="cat-row-total">${fmt(c.total)}</span>
+            </div>
+            <div class="cat-bar-bg">
+              <div class="cat-bar-fill" style="width:${pct}%;background:${c.color}"></div>
+            </div>
+            <span class="cat-row-count">${c.count} mov.</span>
+          </div>
+        </div>`;
+    }).join('') || `<div class="empty" style="padding:16px">Sin gastos este mes</div>`;
+
+    // Barras mes a mes
+    const maxMes = Math.max(1, ...yearly.meses.map(m => parseInt(m.total)));
+    const mesActual = state.mes;
+    const mesRows = yearly.meses.map(m => {
+      const pct = Math.round((parseInt(m.total) / maxMes) * 100);
+      const isActual = m.mes === mesActual;
+      return `
+        <div class="mes-row ${isActual ? 'mes-actual' : ''}" onclick="irAMes(${m.mes})">
+          <span class="mes-row-label">${m.nombre}</span>
+          <div class="mes-bar-bg">
+            <div class="mes-bar-fill" style="width:${pct}%;${isActual ? 'background:var(--gold)' : ''}"></div>
+          </div>
+          <span class="mes-row-total">${parseInt(m.total) > 0 ? fmt(m.total) : '—'}</span>
+        </div>`;
+    }).join('');
 
     el.innerHTML = `
       <div class="month-nav">
@@ -54,68 +91,55 @@ async function loadResumen() {
         <span class="month-title">📅 ${MESES[state.mes]} ${state.anio}</span>
         <button onclick="nextMes()" class="nav-btn">▶</button>
       </div>
-      <div class="cards-grid">
-        <div class="card card-green">
-          <div class="card-label">💰 DROP</div>
-          <div class="card-value">${fmt(d.total_abonos)}</div>
-        </div>
-        <div class="card card-red">
-          <div class="card-label">💥 DAÑO REAL</div>
-          <div class="card-value">${fmt(d.total_cargos)}</div>
-          ${excluido > 0 ? `<div class="card-sub">+${fmt(excluido)} excluido</div>` : ''}
-        </div>
+
+      <div class="total-card">
+        <div class="total-label">💥 GASTO DEL MES</div>
+        <div class="total-value">${fmt(totalGasto)}</div>
+        ${excluido > 0 ? `<div class="total-excluido">+${fmt(excluido)} excluido (inversiones/no-gasto)</div>` : ''}
+        <div class="total-sub">${d.cantidad_movimientos} cargos</div>
       </div>
-      <div class="balance-card">
-        <div class="card-label">⚔️ MESOS NETOS</div>
-        <div class="card-value ${balanceColor}">${balance >= 0 ? '+' : ''}${fmt(d.balance)}</div>
-        <div class="card-sub">${d.cantidad_movimientos} movimientos</div>
-      </div>
-      <div class="section-title">👑 TOP 10 BOSS DROPS</div>
-      <div class="top-list">
-        ${d.top_10_gastos.map((g, i) => `
-          <div class="top-item">
-            <span class="top-rank">${monsters[i] || '👾'}</span>
-            <div class="top-info">
-              <div class="top-desc">${cleanDesc(g.descripcion)}</div>
-              <div class="top-date">${fmtFecha(g.fecha)}</div>
-            </div>
-            <div class="top-monto">-${fmt(g.monto)}</div>
-          </div>`).join('')}
-      </div>`;
-  } catch {
+
+      <div class="section-title">📊 GASTO POR CATEGORÍA</div>
+      <div class="cat-list">${catRows}</div>
+
+      <div class="section-title" style="margin-top:20px">📅 ${state.anio} MES A MES</div>
+      <div class="mes-list">${mesRows}</div>
+    `;
+  } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
   }
 }
 
 window.prevMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadResumen(); };
 window.nextMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadResumen(); };
+window.irAMes  = (mes) => { state.mes = mes; navigate('movimientos'); };
 
-// ── Pantalla: Movimientos ─────────────────────────────────────────────────────
+// ── Pantalla: Movimientos (solo cargos) ───────────────────────────────────────
 async function loadMovimientos() {
   const el = $('mov-list');
   el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
 
-  const desde = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
+  const desde   = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
   const lastDay = new Date(state.anio, state.mes, 0).getDate();
   const hasta   = `${state.anio}-${String(state.mes).padStart(2,'0')}-${lastDay}`;
 
   try {
-    const d = await getMovements({ desde, hasta,
-      tipo: state.filtroTipo || undefined,
+    const d = await getMovements({
+      desde, hasta,
+      tipo: 'cargo',   // solo cargos, siempre
       buscar: state.buscar || undefined,
     });
 
     state.movimientosList = d.data;
 
-    // Badge sin categorizar
-    const sinCat = d.data.filter(m => m.tipo === 'cargo' && !m.categoria_id);
+    const sinCat = d.data.filter(m => !m.categoria_id);
     const badge = $('badge-sin-cat');
     if (badge) {
-      badge.textContent = sinCat.length > 0 ? `❓ ${sinCat.length} SIN CATEGORIZAR — TAP PARA ASIGNAR` : '';
+      badge.textContent = sinCat.length > 0 ? `❓ ${sinCat.length} SIN CATEGORIZAR — TAP AQUÍ` : '';
       badge.classList.toggle('hidden', sinCat.length === 0);
     }
 
-    if (!d.data.length) { el.innerHTML = `<div class="empty">Sin movimientos</div>`; return; }
+    if (!d.data.length) { el.innerHTML = `<div class="empty">Sin gastos este mes</div>`; return; }
 
     const grupos = {};
     d.data.forEach(m => { if (!grupos[m.fecha]) grupos[m.fecha]=[]; grupos[m.fecha].push(m); });
@@ -127,22 +151,18 @@ async function loadMovimientos() {
           <div class="date-header">📅 ${fmtFecha(fecha)}</div>
           ${movs.map(m => {
             const cat = m.categoria;
-            const isCargo = m.tipo === 'cargo';
             const catBadge = cat
               ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
-              : (isCargo ? `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>` : '');
+              : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
             return `
-            <div class="mov-item${isCargo ? ' mov-cargo' : ''}${isCargo && !cat ? ' mov-sin-cat' : ''}"
-                 ${isCargo ? `onclick="abrirModalDesde(${m.id})"` : ''}>
-              <div class="mov-icon">${isCargo ? '💥' : '💰'}</div>
+            <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
+              <div class="mov-icon">💥</div>
               <div class="mov-info">
                 <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
-                <div class="mov-sub">${m.sucursal || m.cuenta || ''}</div>
+                <div class="mov-sub">${m.sucursal || ''}</div>
                 ${catBadge}
               </div>
-              <div class="mov-monto ${isCargo ? 'monto-out' : 'monto-in'}">
-                ${isCargo ? '-' : '+'}${fmt(m.monto)}
-              </div>
+              <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
             </div>`;
           }).join('')}
         </div>`).join('');
@@ -151,12 +171,6 @@ async function loadMovimientos() {
   }
 }
 
-window.setFiltro = tipo => {
-  state.filtroTipo = state.filtroTipo === tipo ? '' : tipo;
-  document.querySelectorAll('.filtro-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.tipo === state.filtroTipo));
-  loadMovimientos();
-};
 window.onBuscar = e => {
   state.buscar = e.target.value;
   clearTimeout(window._buscarTimer);
@@ -170,7 +184,7 @@ window.onMesMovChange = e => {
 
 // ── Modal de categorización ───────────────────────────────────────────────────
 window.abrirModalCategoria = () => {
-  const primero = state.movimientosList.find(m => m.tipo === 'cargo' && !m.categoria_id);
+  const primero = state.movimientosList.find(m => !m.categoria_id);
   if (primero) abrirModalDesde(primero.id);
 };
 
@@ -178,9 +192,9 @@ window.abrirModalDesde = (movId) => {
   const mov = state.movimientosList.find(m => m.id === movId);
   if (!mov) return;
 
-  $('modal-desc').textContent   = cleanDesc(mov.descripcion);
-  $('modal-monto').textContent  = `-${fmt(mov.monto)}`;
-  $('modal-fecha').textContent  = `📅 ${fmtFecha(mov.fecha)}`;
+  $('modal-desc').textContent  = cleanDesc(mov.descripcion);
+  $('modal-monto').textContent = `-${fmt(mov.monto)}`;
+  $('modal-fecha').textContent = `📅 ${fmtFecha(mov.fecha)}`;
   $('modal-contador').textContent = mov.categoria
     ? `${mov.categoria.icono} ${mov.categoria.nombre}`
     : '❓ sin categoría';
@@ -201,14 +215,10 @@ window.guardarCategoria = async (movId, catId) => {
     $('modal-categoria').classList.add('hidden');
     showToast('✓ Categoría guardada');
     loadMovimientos();
-  } catch {
-    showToast('Error al guardar', true);
-  }
+  } catch { showToast('Error al guardar', true); }
 };
 
-window.cerrarModal = () => {
-  $('modal-categoria').classList.add('hidden');
-};
+window.cerrarModal = () => $('modal-categoria').classList.add('hidden');
 
 // ── Pantalla: Agregar ─────────────────────────────────────────────────────────
 async function submitTarjeta(e) {
@@ -267,8 +277,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (fechaInput) fechaInput.value = new Date().toISOString().split('T')[0];
 
   $('form-tc').addEventListener('submit', submitTarjeta);
-
-  // Cerrar modal al tocar el fondo
   $('modal-categoria').addEventListener('click', e => {
     if (e.target === $('modal-categoria')) cerrarModal();
   });
