@@ -6,6 +6,7 @@ const state = {
   anio: new Date().getFullYear(),
   mes: new Date().getMonth() + 1,
   buscar: '',
+  orden: 'fecha_desc',   // 'fecha_desc' | 'monto_desc' | 'monto_asc'
   categorias: [],
   movimientosList: [],
 };
@@ -167,8 +168,30 @@ async function loadMovimientos() {
   }
 }
 
+function movCard(m, showDate = false) {
+  const cat = m.categoria;
+  const catBadge = cat
+    ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
+    : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
+  const sub = [m.sucursal, showDate ? fmtFecha(m.fecha) : ''].filter(Boolean).join(' · ');
+  return `
+    <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
+      <div class="mov-icon">💥</div>
+      <div class="mov-info">
+        <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
+        ${sub ? `<div class="mov-sub">${sub}</div>` : ''}
+        ${catBadge}
+      </div>
+      <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
+    </div>`;
+}
+
 function renderMovimientos() {
   const el = $('mov-list');
+
+  // Actualiza botones de orden
+  document.querySelectorAll('.sort-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.orden === state.orden));
 
   const sinCat = state.movimientosList.filter(m => !m.categoria_id);
   const badge = $('badge-sin-cat');
@@ -182,32 +205,29 @@ function renderMovimientos() {
     return;
   }
 
-  const grupos = {};
-  state.movimientosList.forEach(m => { if (!grupos[m.fecha]) grupos[m.fecha]=[]; grupos[m.fecha].push(m); });
+  let lista = [...state.movimientosList];
 
-  el.innerHTML = Object.entries(grupos)
-    .sort(([a],[b]) => b.localeCompare(a))
-    .map(([fecha, movs]) => `
-      <div class="date-group">
-        <div class="date-header">📅 ${fmtFecha(fecha)}</div>
-        ${movs.map(m => {
-          const cat = m.categoria;
-          const catBadge = cat
-            ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
-            : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
-          return `
-          <div class="mov-item${!cat ? ' mov-sin-cat' : ''}" onclick="abrirModalDesde(${m.id})">
-            <div class="mov-icon">💥</div>
-            <div class="mov-info">
-              <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
-              <div class="mov-sub">${m.sucursal || ''}</div>
-              ${catBadge}
-            </div>
-            <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
-          </div>`;
-        }).join('')}
-      </div>`).join('');
+  if (state.orden === 'monto_desc') {
+    lista.sort((a, b) => Math.abs(parseInt(b.monto)) - Math.abs(parseInt(a.monto)));
+    el.innerHTML = `<div class="date-group">${lista.map(m => movCard(m, true)).join('')}</div>`;
+  } else if (state.orden === 'monto_asc') {
+    lista.sort((a, b) => Math.abs(parseInt(a.monto)) - Math.abs(parseInt(b.monto)));
+    el.innerHTML = `<div class="date-group">${lista.map(m => movCard(m, true)).join('')}</div>`;
+  } else {
+    // fecha_desc — agrupado por día
+    const grupos = {};
+    lista.forEach(m => { if (!grupos[m.fecha]) grupos[m.fecha]=[]; grupos[m.fecha].push(m); });
+    el.innerHTML = Object.entries(grupos)
+      .sort(([a],[b]) => b.localeCompare(a))
+      .map(([fecha, movs]) => `
+        <div class="date-group">
+          <div class="date-header">📅 ${fmtFecha(fecha)}</div>
+          ${movs.map(m => movCard(m)).join('')}
+        </div>`).join('');
+  }
 }
+
+window.setOrden = (orden) => { state.orden = orden; renderMovimientos(); };
 
 window.onBuscar = e => {
   state.buscar = e.target.value;

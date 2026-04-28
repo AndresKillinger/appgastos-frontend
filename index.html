@@ -184,7 +184,15 @@
     .stack-total { font-family: var(--fp); font-size: 7px; color: var(--muted); width: 72px; text-align: right; flex-shrink: 0; }
 
     /* ── Movimientos ── */
-    .mov-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .mov-toolbar { display: flex; gap: 8px; margin-bottom: 6px; }
+    .sort-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .sort-label { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+    .sort-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--muted); font-family: var(--fp); font-size: 6px;
+      padding: 6px 8px; cursor: pointer; flex: 1;
+    }
+    .sort-btn.active { background: var(--surface2); border-color: var(--gold); color: var(--gold); }
     .search-box {
       flex: 1; background: var(--surface); border: 2px solid var(--border);
       padding: 10px 12px; color: var(--gold); font-size: 17px; outline: none;
@@ -388,6 +396,12 @@
       </div>
       <div class="mov-toolbar">
         <input type="search" class="search-box" placeholder="🔍 Buscar gasto..." oninput="onBuscar(event)">
+      </div>
+      <div class="sort-bar">
+        <span class="sort-label">Orden:</span>
+        <button class="sort-btn active" data-orden="fecha_desc" onclick="setOrden('fecha_desc')">📅 FECHA</button>
+        <button class="sort-btn" data-orden="monto_desc" onclick="setOrden('monto_desc')">💰 MAYOR</button>
+        <button class="sort-btn" data-orden="monto_asc" onclick="setOrden('monto_asc')">💰 MENOR</button>
       </div>
       <img class="bg-mob bg-mob-slime"
            src="https://maplestory.io/api/GMS/latest/mob/210100/render/stand"
