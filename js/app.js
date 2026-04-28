@@ -22,27 +22,38 @@ const MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun',
                      'Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function periodNavHTML(screen) {
-  const opts = MESES_CORTO.slice(1).map((n, i) => {
+  const mesOpts = MESES_CORTO.slice(1).map((n, i) => {
     const mes = i + 1;
     return `<div class="mes-option${mes === state.mes ? ' selected' : ''}" onclick="selMes('${screen}',${mes})">${n}</div>`;
   }).join('');
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear - 5; y <= currentYear + 1; y++) years.push(y);
+  const yearOpts = years.map(y =>
+    `<div class="mes-option${y === state.anio ? ' selected' : ''}" onclick="selAnio('${screen}',${y})">${y}</div>`
+  ).join('');
   return `
     <div class="period-nav">
-      <button class="nav-btn-sm" onclick="prevAnio('${screen}')">◀</button>
+      <button class="nav-btn-sm" onclick="prevMes('${screen}')">◀</button>
       <div class="mes-dropdown" id="mes-dd-${screen}">
-        <button class="mes-trigger" onclick="toggleMesMenu('${screen}',event)">
+        <button class="mes-trigger" onclick="togglePeriodMenu('mes-dd-${screen}',event)">
           <span>${MESES[state.mes]}</span><span class="mes-arrow">▾</span>
         </button>
-        <div class="mes-menu hidden">${opts}</div>
+        <div class="mes-menu hidden">${mesOpts}</div>
       </div>
-      <span class="year-label">${state.anio}</span>
-      <button class="nav-btn-sm" onclick="nextAnio('${screen}')">▶</button>
+      <div class="mes-dropdown anio-dropdown" id="anio-dd-${screen}">
+        <button class="mes-trigger anio-trigger" onclick="togglePeriodMenu('anio-dd-${screen}',event)">
+          <span>${state.anio}</span><span class="mes-arrow">▾</span>
+        </button>
+        <div class="mes-menu mes-menu-anio hidden">${yearOpts}</div>
+      </div>
+      <button class="nav-btn-sm" onclick="nextMes('${screen}')">▶</button>
     </div>`;
 }
 
-window.toggleMesMenu = (screen, e) => {
+window.togglePeriodMenu = (id, e) => {
   if (e) e.stopPropagation();
-  const dd = $(`mes-dd-${screen}`);
+  const dd = $(id);
   if (!dd) return;
   document.querySelectorAll('.mes-dropdown.open').forEach(d => {
     if (d !== dd) { d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden'); }
@@ -51,21 +62,57 @@ window.toggleMesMenu = (screen, e) => {
   dd.querySelector('.mes-menu').classList.toggle('hidden', !open);
 };
 
-window.selMes = (screen, mes) => {
-  state.mes = mes;
+const closeAllDropdowns = () => {
   document.querySelectorAll('.mes-dropdown.open').forEach(d => {
     d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden');
   });
+};
+
+window.selMes = (screen, mes) => {
+  state.mes = mes;
+  closeAllDropdowns();
+  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+};
+
+window.selAnio = (screen, anio) => {
+  state.anio = anio;
+  closeAllDropdowns();
+  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+};
+
+window.prevMes = screen => {
+  state.mes--;
+  if (state.mes < 1) { state.mes = 12; state.anio--; }
+  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+};
+
+window.nextMes = screen => {
+  state.mes++;
+  if (state.mes > 12) { state.mes = 1; state.anio++; }
   if (screen === 'resumen') loadResumen(); else loadMovimientos();
 };
 
 document.addEventListener('click', e => {
-  if (!e.target.closest('.mes-dropdown')) {
-    document.querySelectorAll('.mes-dropdown.open').forEach(d => {
-      d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden');
-    });
-  }
+  if (!e.target.closest('.mes-dropdown')) closeAllDropdowns();
 });
+
+// Paleta vibrante de fallback — usada cuando una categoría tiene el color
+// por defecto (#888888) o ninguno. Determinística por id/nombre para que
+// el mismo cat tenga siempre el mismo color.
+const CAT_PALETTE = [
+  '#ff4d6a', '#ff7733', '#ffb938', '#ffe34d',
+  '#4dffa6', '#2dffd1', '#5cc6ff', '#5b8bff',
+  '#a35bff', '#d864ff', '#ff5bd1', '#ff5b9b',
+  '#7bff5b', '#5bd1ff'
+];
+const _isDefaultColor = c => !c || /^#?(8{3}|8{6})$/i.test(String(c).replace('#',''));
+function pickColor(cid, color) {
+  if (color && !_isDefaultColor(color)) return color;
+  const key = String(cid ?? 'sin');
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return CAT_PALETTE[Math.abs(h) % CAT_PALETTE.length];
+}
 
 function mobImg(mobId, emoji, size = 28) {
   if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
@@ -106,16 +153,17 @@ async function loadResumen() {
     const catRows = d.by_category.map(c => {
       const pct = Math.round((parseInt(c.total) / maxCat) * 100);
       const cid = c.categoria_id ?? 0;
+      const color = pickColor(cid, c.color);
       return `
         <div class="cat-row" onclick="toggleCatDetail(${cid},${state.mes},${state.anio})">
           <div class="cat-row-icon">${mobImg(c.mob_id, c.icono, 26)}</div>
           <div class="cat-row-body">
             <div class="cat-row-header">
-              <span class="cat-row-name" style="color:${c.color}">${c.nombre}</span>
+              <span class="cat-row-name" style="color:${color}">${c.nombre}</span>
               <span class="cat-row-total">${fmt(c.total)}</span>
             </div>
             <div class="cat-bar-bg">
-              <div class="cat-bar-fill" style="width:${pct}%;background:${c.color}"></div>
+              <div class="cat-bar-fill" style="width:${pct}%;background:${color}"></div>
             </div>
             <span class="cat-row-count">${c.count} mov. ▼</span>
           </div>
@@ -166,7 +214,8 @@ async function loadResumen() {
             const pct = Math.round((parseInt(m.total) / maxTotal) * 100);
             const segs = m.categorias.map(c => {
               const info = stackData.categorias[String(c.categoria_id)];
-              return `<div class="vstack-seg" style="flex:${parseInt(c.total)};background:${info?.color||'#888888'}" title="${info?.nombre||'Sin cat'}: ${fmt(c.total)}"></div>`;
+              const color = pickColor(c.categoria_id, info?.color);
+              return `<div class="vstack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${info?.nombre||'Sin cat'}: ${fmt(c.total)}"></div>`;
             }).join('');
             return `
               <div class="vstack-col${isActual?' vstack-col-active':''}" onclick="irAMes(${m.mes})">
@@ -183,11 +232,11 @@ async function loadResumen() {
     // Leyenda enriquecida con totales por categoría
     const stackLegend = stackData
       ? Object.entries(stackData.categorias)
-          .map(([cid, c]) => ({ cid, ...c, total: catTotalsAnio[cid] || 0 }))
+          .map(([cid, c]) => ({ cid, ...c, total: catTotalsAnio[cid] || 0, _color: pickColor(cid, c.color) }))
           .sort((a,b) => b.total - a.total)
           .map(c => `
             <span class="vstack-legend-item">
-              <span class="vstack-legend-dot" style="background:${c.color};color:${c.color}"></span>
+              <span class="vstack-legend-dot" style="background:${c._color};color:${c._color}"></span>
               <span class="vstack-legend-name">${c.nombre}</span>
               <span class="vstack-legend-amt">${fmtShort(c.total)}</span>
             </span>`).join('')
@@ -261,13 +310,7 @@ window.toggleCatDetail = async (catId, mes, anio) => {
   } catch { el.innerHTML = `<div class="cat-detail-row" style="color:var(--red)">Error</div>`; }
 };
 
-window.selMesResumen = mes => { state.mes = mes; loadResumen(); };
-window.selMesMov     = mes => { state.mes = mes; loadMovimientos(); };
-window.prevAnio  = screen => { state.anio--; screen === 'resumen' ? loadResumen() : loadMovimientos(); };
-window.nextAnio  = screen => { state.anio++; screen === 'resumen' ? loadResumen() : loadMovimientos(); };
-window.irAMes    = mes  => { state.mes = mes; navigate('movimientos'); };
-window.prevMovMes = () => { state.mes--; if (state.mes < 1) { state.mes=12; state.anio--; } loadMovimientos(); };
-window.nextMovMes = () => { state.mes++; if (state.mes > 12) { state.mes=1; state.anio++; } loadMovimientos(); };
+window.irAMes = mes => { state.mes = mes; navigate('movimientos'); };
 
 // ── Pantalla: Movimientos ─────────────────────────────────────────────────────
 async function loadMovimientos() {

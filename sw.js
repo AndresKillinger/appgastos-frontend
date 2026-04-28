@@ -1,4 +1,4 @@
-const CACHE = 'appgastos-v11';
+const CACHE = 'appgastos-v13';
 const ASSETS = ['/', '/index.html', '/js/api.js', '/js/app.js'];
 
 self.addEventListener('install', e => {
