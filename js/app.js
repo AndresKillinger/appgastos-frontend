@@ -67,15 +67,18 @@ async function loadResumen() {
       getYearlyCategoryBreakdown(state.anio).catch(() => null),
     ]);
 
-    const totalGasto = parseInt(d.total_cargos);
-    const excluido   = parseInt(d.total_excluido || 0);
+    const totalGasto  = parseInt(d.total_cargos);
+    const totalAbonos = parseInt(d.total_abonos || 0);
+    const gastoNeto   = parseInt(d.gasto_neto ?? d.total_cargos);
+    const excluido    = parseInt(d.total_excluido || 0);
 
     // Barras de categorías
     const maxCat = Math.max(1, ...d.by_category.map(c => parseInt(c.total)));
     const catRows = d.by_category.map(c => {
       const pct = Math.round((parseInt(c.total) / maxCat) * 100);
+      const cid = c.categoria_id ?? 0;
       return `
-        <div class="cat-row">
+        <div class="cat-row" onclick="toggleCatDetail(${cid},${state.mes},${state.anio})">
           <div class="cat-row-icon">${mobImg(c.mob_id, c.icono, 26)}</div>
           <div class="cat-row-body">
             <div class="cat-row-header">
@@ -85,9 +88,10 @@ async function loadResumen() {
             <div class="cat-bar-bg">
               <div class="cat-bar-fill" style="width:${pct}%;background:${c.color}"></div>
             </div>
-            <span class="cat-row-count">${c.count} mov.</span>
+            <span class="cat-row-count">${c.count} mov. ▼</span>
           </div>
-        </div>`;
+        </div>
+        <div id="cat-detail-${cid}" class="cat-detail hidden"></div>`;
     }).join('') || `<div class="empty" style="padding:16px">Sin gastos este mes</div>`;
 
     // Barras mes a mes simples
@@ -135,9 +139,10 @@ async function loadResumen() {
 
       <div class="total-card">
         <div class="total-label">💥 GASTO DEL MES</div>
-        <div class="total-value">${fmt(totalGasto)}</div>
-        ${excluido > 0 ? `<div class="total-excluido">+${fmt(excluido)} excluido (inversiones/no-gasto)</div>` : ''}
-        <div class="total-sub">${d.cantidad_movimientos} cargos</div>
+        <div class="total-value">${fmt(gastoNeto)}</div>
+        ${totalAbonos > 0 ? `<div class="total-excluido" style="color:var(--green)">-${fmt(totalAbonos)} reembolsado</div>` : ''}
+        ${excluido > 0 ? `<div class="total-excluido">+${fmt(excluido)} excluido</div>` : ''}
+        <div class="total-sub">${d.cantidad_movimientos} cargos${totalAbonos > 0 ? ` · bruto ${fmt(totalGasto)}` : ''}</div>
       </div>
 
       <div class="section-title">📊 GASTO POR CATEGORÍA</div>
@@ -159,6 +164,27 @@ async function loadResumen() {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
   }
 }
+
+window.toggleCatDetail = async (catId, mes, anio) => {
+  const el = $(`cat-detail-${catId}`);
+  if (!el) return;
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = `<div class="cat-detail-row" style="color:var(--muted)">🐌 Cargando...</div>`;
+  try {
+    const desde = `${anio}-${String(mes).padStart(2,'0')}-01`;
+    const hasta  = `${anio}-${String(mes).padStart(2,'0')}-${new Date(anio, mes, 0).getDate()}`;
+    const d = await getMovements({ desde, hasta, categoria_id: catId, limite: 100 });
+    if (!d.data?.length) { el.innerHTML = `<div class="cat-detail-row" style="color:var(--muted)">Sin movimientos</div>`; return; }
+    el.innerHTML = d.data.map(m =>
+      `<div class="cat-detail-row">
+        <span class="cat-detail-fecha">${fmtFecha(m.fecha)}</span>
+        <span class="cat-detail-desc">${cleanDesc(m.descripcion)}</span>
+        <span class="cat-detail-monto">${fmt(m.monto)}</span>
+      </div>`
+    ).join('');
+  } catch { el.innerHTML = `<div class="cat-detail-row" style="color:var(--red)">Error</div>`; }
+};
 
 window.selMesResumen = mes => { state.mes = mes; loadResumen(); };
 window.selMesMov     = mes => { state.mes = mes; loadMovimientos(); };

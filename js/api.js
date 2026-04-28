@@ -5,13 +5,14 @@ export async function getSummary(anio, mes) {
   return r.json();
 }
 
-export async function getMovements({ desde, hasta, tipo, cuenta, buscar, limite = 200 } = {}) {
+export async function getMovements({ desde, hasta, tipo, cuenta, buscar, categoria_id, limite = 200 } = {}) {
   const params = new URLSearchParams();
-  if (desde)  params.set('desde', desde);
-  if (hasta)  params.set('hasta', hasta);
-  if (tipo)   params.set('tipo', tipo);
-  if (cuenta) params.set('cuenta', cuenta);
-  if (buscar) params.set('buscar', buscar);
+  if (desde)                   params.set('desde', desde);
+  if (hasta)                   params.set('hasta', hasta);
+  if (tipo)                    params.set('tipo', tipo);
+  if (cuenta)                  params.set('cuenta', cuenta);
+  if (buscar)                  params.set('buscar', buscar);
+  if (categoria_id !== undefined) params.set('categoria_id', categoria_id);
   params.set('limite', limite);
   const r = await fetch(`${BASE}/movements?${params}`);
   return r.json();

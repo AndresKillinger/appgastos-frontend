@@ -159,6 +159,19 @@
     .cat-bar-fill  { height: 100%; transition: width .3s; }
     .cat-row-count { font-size: 14px; color: var(--muted); }
 
+    /* ── Cat detail accordion ── */
+    .cat-row { cursor: pointer; }
+    .cat-row:active { opacity: .8; }
+    .cat-detail { background: var(--bg); border: 1px solid var(--border); border-top: none; margin-bottom: 4px; overflow: hidden; }
+    .cat-detail-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-bottom: 1px solid rgba(50,50,100,.3); font-size: 15px;
+    }
+    .cat-detail-row:last-child { border-bottom: none; }
+    .cat-detail-fecha { color: var(--muted); font-size: 13px; flex-shrink: 0; width: 68px; }
+    .cat-detail-desc  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cat-detail-monto { font-family: var(--fp); font-size: 7px; color: var(--red); flex-shrink: 0; }
+
     /* ── Mes a mes ── */
     .mes-list { display: flex; flex-direction: column; gap: 3px; }
     .mes-row {
