@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory } from './api.js';
+import { getSummary, getMovements, addCreditCard, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -231,36 +231,63 @@ window.abrirModalDesde = (movId) => {
     : '❓ sin categoría';
 
   $('cat-grid').innerHTML = state.categorias.map(cat => `
-    <button class="cat-btn ${cat.es_gasto ? '' : 'cat-no-gasto'}"
-            onclick="guardarCategoria(${mov.id}, ${cat.id})">
-      <div class="cat-btn-img">${mobImg(cat.mob_id, cat.icono, 32)}</div>
-      <span class="cat-name" style="color:${cat.color}">${cat.nombre}</span>
-    </button>`).join('');
+    <div class="cat-btn-wrap">
+      <button class="cat-btn ${cat.es_gasto ? '' : 'cat-no-gasto'}"
+              onclick="guardarCategoria(${mov.id}, ${cat.id})">
+        <div class="cat-btn-img">${mobImg(cat.mob_id, cat.icono, 32)}</div>
+        <span class="cat-name" style="color:${cat.color}">${cat.nombre}</span>
+      </button>
+      ${!cat.es_sistema ? `<button class="cat-del" onclick="eliminarCategoria(event,${cat.id})" title="Eliminar">✕</button>` : ''}
+    </div>`).join('');
 
   $('modal-categoria').classList.remove('hidden');
 };
 
-// Optimistic update: close + update state immediately, sync in background
+// Optimistic: actualiza estado, avanza al siguiente sin categoría, sincroniza en bg
 window.guardarCategoria = async (movId, catId) => {
   const mov = state.movimientosList.find(m => m.id === movId);
   const cat = state.categorias.find(c => c.id === catId);
-  const prevCategoria   = mov?.categoria;
-  const prevCategoriaId = mov?.categoria_id;
+  const prev = { categoria: mov?.categoria, categoria_id: mov?.categoria_id };
 
   if (mov) {
     mov.categoria_id = catId;
     mov.categoria = cat ? { nombre: cat.nombre, icono: cat.icono, color: cat.color, es_gasto: cat.es_gasto } : null;
   }
-  $('modal-categoria').classList.add('hidden');
   renderMovimientos();
   showToast(`✓ ${cat?.nombre || 'Guardado'}`);
+
+  // Auto-avance: busca el siguiente sin categoría
+  const next = state.movimientosList.find(m => m.id !== movId && !m.categoria_id);
+  if (next) {
+    abrirModalDesde(next.id);
+  } else {
+    $('modal-categoria').classList.add('hidden');
+    showToast('🍄 ¡Todo categorizado!');
+  }
 
   try {
     await setCategory(movId, catId);
   } catch {
-    if (mov) { mov.categoria_id = prevCategoriaId; mov.categoria = prevCategoria; }
+    if (mov) { mov.categoria_id = prev.categoria_id; mov.categoria = prev.categoria; }
     renderMovimientos();
     showToast('Error al guardar', true);
+  }
+};
+
+window.eliminarCategoria = async (e, catId) => {
+  e.stopPropagation();
+  const cat = state.categorias.find(c => c.id === catId);
+  if (!cat) return;
+  try {
+    await deleteCategory(catId);
+    state.categorias = state.categorias.filter(c => c.id !== catId);
+    // Limpiar de movimientos en memoria
+    state.movimientosList.forEach(m => { if (m.categoria_id === catId) { m.categoria_id = null; m.categoria = null; } });
+    renderMovimientos();
+    showToast(`✓ "${cat.nombre}" eliminada`);
+    if (window._currentMovId != null) abrirModalDesde(window._currentMovId);
+  } catch (err) {
+    showToast(err?.message || 'Error al eliminar', true);
   }
 };
 

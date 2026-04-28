@@ -45,6 +45,11 @@ export async function syncEmail() {
   return r.json();
 }
 
+export async function deleteCategory(catId) {
+  const r = await fetch(`${BASE}/categories/${catId}`, { method: 'DELETE' });
+  return r.json();
+}
+
 export async function createCategory({ nombre, icono, es_gasto, color }) {
   const r = await fetch(`${BASE}/categories`, {
     method: 'POST',
