@@ -176,13 +176,14 @@ window.toggleCatDetail = async (catId, mes, anio) => {
     const hasta  = `${anio}-${String(mes).padStart(2,'0')}-${new Date(anio, mes, 0).getDate()}`;
     const d = await getMovements({ desde, hasta, categoria_id: catId, limite: 100 });
     if (!d.data?.length) { el.innerHTML = `<div class="cat-detail-row" style="color:var(--muted)">Sin movimientos</div>`; return; }
-    el.innerHTML = d.data.map(m =>
-      `<div class="cat-detail-row">
+    el.innerHTML = d.data.map(m => {
+      const abono = m.tipo === 'abono';
+      return `<div class="cat-detail-row">
         <span class="cat-detail-fecha">${fmtFecha(m.fecha)}</span>
         <span class="cat-detail-desc">${cleanDesc(m.descripcion)}</span>
-        <span class="cat-detail-monto">${fmt(m.monto)}</span>
-      </div>`
-    ).join('');
+        <span class="cat-detail-monto${abono ? ' cat-detail-abono' : ''}">${abono ? '+' : ''}${fmt(m.monto)}</span>
+      </div>`;
+    }).join('');
   } catch { el.innerHTML = `<div class="cat-detail-row" style="color:var(--red)">Error</div>`; }
 };
 
