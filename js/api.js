@@ -71,6 +71,16 @@ export async function createCategory({ nombre, icono, es_gasto, color }) {
   return r.json();
 }
 
+export async function uploadPdfTC(pdfFile, rut) {
+  const form = new FormData();
+  form.append('pdf', pdfFile);
+  const r = await fetch(`${BASE}/upload-pdf?tipo=tc&rut=${encodeURIComponent(rut)}`, {
+    method: 'POST',
+    body: form,
+  });
+  return r.json();
+}
+
 export async function addCreditCard({ fecha, descripcion, monto }) {
   const r = await fetch(`${BASE}/movements/credit-card`, {
     method: 'POST',

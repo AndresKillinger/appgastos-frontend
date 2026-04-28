@@ -1,4 +1,4 @@
-import { getSummary, getMovements, addCreditCard, addApplePay, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
+import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -161,7 +161,7 @@ async function loadMovimientos() {
   const hasta   = `${state.anio}-${String(state.mes).padStart(2,'0')}-${lastDay}`;
 
   try {
-    const d = await getMovements({ desde, hasta, tipo: 'cargo', cuenta: state.cuenta || undefined, buscar: state.buscar || undefined });
+    const d = await getMovements({ desde, hasta, cuenta: state.cuenta || undefined, buscar: state.buscar || undefined });
     state.movimientosList = d.data;
     renderMovimientos();
   } catch {
@@ -172,21 +172,22 @@ async function loadMovimientos() {
 const isTarjeta = m => m.cartola_id === 0;
 
 function movCard(m, showDate = false) {
-  const cat = m.categoria;
-  const tc = isTarjeta(m);
+  const cat    = m.categoria;
+  const tc     = isTarjeta(m);
+  const abono  = m.tipo === 'abono';
   const catBadge = cat
     ? `<div class="cat-badge" style="border-color:${cat.color};color:${cat.color}">${cat.icono} ${cat.nombre}${!cat.es_gasto ? ' ✓' : ''}</div>`
     : `<div class="cat-badge cat-badge-sin">❓ tap para categorizar</div>`;
   const sub = [tc ? '💳 TC' : null, m.sucursal, showDate ? fmtFecha(m.fecha) : ''].filter(Boolean).join(' · ');
   return `
-    <div class="mov-item${!cat ? ' mov-sin-cat' : ''}${tc ? ' mov-tc' : ''}" onclick="abrirModalDesde(${m.id})">
-      <div class="mov-icon">${tc ? '💳' : '💥'}</div>
+    <div class="mov-item${!cat ? ' mov-sin-cat' : ''}${tc ? ' mov-tc' : ''}${abono ? ' mov-abono' : ''}" onclick="abrirModalDesde(${m.id})">
+      <div class="mov-icon">${abono ? '💰' : tc ? '💳' : '💥'}</div>
       <div class="mov-info">
         <div class="mov-desc">${cleanDesc(m.descripcion)}</div>
         ${sub ? `<div class="mov-sub">${sub}</div>` : ''}
         ${catBadge}
       </div>
-      <div class="mov-monto monto-out">-${fmt(m.monto)}</div>
+      <div class="mov-monto ${abono ? 'monto-in' : 'monto-out'}">${abono ? '+' : '-'}${fmt(m.monto)}</div>
     </div>`;
 }
 
@@ -254,7 +255,7 @@ window.abrirModalDesde = (movId) => {
   window._currentMovId = movId;
 
   $('modal-desc').textContent  = cleanDesc(mov.descripcion);
-  $('modal-monto').textContent = `-${fmt(mov.monto)}`;
+  $('modal-monto').textContent = `${mov.tipo === 'abono' ? '+' : '-'}${fmt(mov.monto)}`;
   $('modal-fecha').textContent = `📅 ${fmtFecha(mov.fecha)}`;
   $('modal-contador').textContent = mov.categoria
     ? `${mov.categoria.icono} ${mov.categoria.nombre}`
@@ -348,33 +349,6 @@ window.guardarNuevaCat = async () => {
   } catch { showToast('Error al crear', true); }
 };
 
-// ── Pantalla: Agregar ─────────────────────────────────────────────────────────
-async function submitTarjeta(e) {
-  e.preventDefault();
-  const btn = $('btn-agregar');
-  btn.disabled = true; btn.textContent = 'Guardando...';
-  try {
-    await addApplePay({
-      fecha: $('input-fecha').value,
-      descripcion: $('input-desc').value,
-      monto: parseInt($('input-monto').value),
-    });
-    $('form-tc').reset();
-    $('input-fecha').value = new Date().toISOString().split('T')[0];
-    showToast('💳 Gasto TC agregado!');
-  } catch { showToast('Error al guardar', true); }
-  finally { btn.disabled = false; btn.textContent = '💳 GUARDAR GASTO TC'; }
-}
-
-window.copiarURL = () => {
-  const url = document.getElementById('api-url')?.textContent;
-  if (!url) return;
-  navigator.clipboard.writeText(url).then(
-    () => showToast('📋 URL copiada'),
-    () => showToast('No se pudo copiar', true)
-  );
-};
-
 // ── Sync ──────────────────────────────────────────────────────────────────────
 window.syncData = async () => {
   const btn = $('btn-sync');
@@ -407,10 +381,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => navigate(b.dataset.tab)));
 
-  const fechaInput = $('input-fecha');
-  if (fechaInput) fechaInput.value = new Date().toISOString().split('T')[0];
-
-  $('form-tc').addEventListener('submit', submitTarjeta);
   $('modal-categoria').addEventListener('click', e => {
     if (e.target === $('modal-categoria')) cerrarModal();
   });

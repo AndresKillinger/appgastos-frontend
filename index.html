@@ -230,6 +230,7 @@
     .cat-badge-sin { color: #ffaa00; border-color: #ffaa00; animation: pulseBorder 1.5s ease-in-out infinite; }
     .mov-sin-cat   { border-color: #ffaa00 !important; }
     .mov-tc        { border-left: 3px solid var(--accent) !important; }
+    .mov-abono     { border-left: 3px solid var(--green) !important; }
 
     /* ── Filtro cuenta ── */
     .cuenta-bar { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -442,56 +443,12 @@
       <div id="mov-list"><div class="loading">🐌 Cargando...</div></div>
     </div>
 
-    <div id="screen-agregar" class="screen hidden">
-
-      <!-- Formulario rápido manual -->
-      <div class="form-card">
-        <h2>💳 AGREGAR GASTO TC</h2>
-        <form id="form-tc">
-          <div class="field"><label>📅 Fecha</label><input type="date" id="input-fecha" required></div>
-          <div class="field"><label>📝 Comercio</label><input type="text" id="input-desc" placeholder="Ej: Starbucks" required></div>
-          <div class="field"><label>💰 Monto ($)</label><input type="number" id="input-monto" placeholder="15990" inputmode="numeric" required></div>
-          <button type="submit" class="btn-primary" id="btn-agregar">💳 GUARDAR GASTO TC</button>
-        </form>
-      </div>
-
-      <!-- Guía iOS Shortcut -->
-      <div class="shortcut-box">
-        <h2>⚡ ATAJO AUTOMÁTICO iOS</h2>
-        <p>Configura este atajo una vez y captura <strong>cada pago Apple Pay automáticamente</strong>, sin tocar la app.</p>
-
-        <div class="shortcut-steps">
-          <div class="step"><span class="step-n">1</span><span>Abre <strong>Atajos</strong> → pestaña <strong>Automatización</strong> → <strong>+</strong></span></div>
-          <div class="step"><span class="step-n">2</span><span>Elige <strong>Personal</strong> → <strong>Cuando pago con Apple Pay</strong></span></div>
-          <div class="step"><span class="step-n">3</span><span>Activa <strong>"Ejecutar de inmediato"</strong> (sin confirmar)</span></div>
-          <div class="step"><span class="step-n">4</span><span>Agrega acción: <strong>Obtener detalles de transacción Apple Pay</strong> → <em>Nombre del comercio</em> → guarda como <code>comercio</code></span></div>
-          <div class="step"><span class="step-n">5</span><span>Agrega acción: <strong>Obtener detalles de transacción Apple Pay</strong> → <em>Monto del pago</em> → guarda como <code>monto</code></span></div>
-          <div class="step"><span class="step-n">6</span><span>Agrega acción: <strong>Obtener contenido de URL</strong></span></div>
-          <div class="step step-url">
-            <span class="step-n">7</span>
-            <span>Configura la solicitud:<br>
-              URL: <code id="api-url">https://appgastos-backend.onrender.com/api/v1/movements/apple-pay</code><br>
-              Método: <strong>POST</strong><br>
-              Cuerpo: <strong>JSON</strong><br>
-              &nbsp;• <code>descripcion</code> → Variable <em>comercio</em><br>
-              &nbsp;• <code>monto</code> → Variable <em>monto</em><br>
-              &nbsp;• <code>cuenta</code> → Texto: <em>apple-pay</em>
-            </span>
-          </div>
-          <div class="step"><span class="step-n">8</span><span>Opcional: agrega <strong>Mostrar notificación</strong> → "✓ [comercio] registrado"</span></div>
-        </div>
-
-        <button class="btn-copy" onclick="copiarURL()">📋 COPIAR URL DEL API</button>
-      </div>
-
-    </div>
 
   </div>
 
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="resumen"><span class="icon">📊</span><span>STATS</span></button>
     <button class="tab-btn" data-tab="movimientos"><span class="icon">👾</span><span>MOV</span></button>
-    <button class="tab-btn" data-tab="agregar"><span class="icon">🛒</span><span>SHOP</span></button>
   </nav>
 
 </div>
