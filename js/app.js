@@ -44,7 +44,7 @@ async function loadResumen() {
     const [d, yearly, stackData] = await Promise.all([
       getSummary(state.anio, state.mes),
       getYearlySummary(state.anio),
-      getYearlyCategoryBreakdown(state.anio),
+      getYearlyCategoryBreakdown(state.anio).catch(() => null),
     ]);
 
     const totalGasto = parseInt(d.total_cargos);
@@ -87,23 +87,25 @@ async function loadResumen() {
     }).join('');
 
     // Gráfico de barras apiladas por categoría y mes
-    const stackRows = stackData.meses
-      .filter(m => parseInt(m.total) > 0)
-      .map(m => {
-        const isActual = m.mes === mesActual;
-        const segs = m.categorias.map(c => {
-          const info = stackData.categorias[String(c.categoria_id)];
-          const color = info?.color || '#888888';
-          const nombre = info?.nombre || 'Sin cat';
-          return `<div class="stack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${nombre}: ${fmt(c.total)}"></div>`;
-        }).join('');
-        return `
-          <div class="stack-row ${isActual ? 'stack-row-active' : ''}" onclick="irAMes(${m.mes})">
-            <span class="stack-label">${m.nombre}</span>
-            <div class="stack-bar">${segs}</div>
-            <span class="stack-total">${fmt(m.total)}</span>
-          </div>`;
-      }).join('') || `<div class="empty" style="padding:8px">Sin datos</div>`;
+    const stackRows = stackData
+      ? stackData.meses
+          .filter(m => parseInt(m.total) > 0)
+          .map(m => {
+            const isActual = m.mes === mesActual;
+            const segs = m.categorias.map(c => {
+              const info = stackData.categorias[String(c.categoria_id)];
+              const color = info?.color || '#888888';
+              const nombre = info?.nombre || 'Sin cat';
+              return `<div class="stack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${nombre}: ${fmt(c.total)}"></div>`;
+            }).join('');
+            return `
+              <div class="stack-row ${isActual ? 'stack-row-active' : ''}" onclick="irAMes(${m.mes})">
+                <span class="stack-label">${m.nombre}</span>
+                <div class="stack-bar">${segs}</div>
+                <span class="stack-total">${fmt(m.total)}</span>
+              </div>`;
+          }).join('') || `<div class="empty" style="padding:8px">Sin datos</div>`
+      : '';
 
     el.innerHTML = `
       <div class="month-nav">
@@ -125,13 +127,14 @@ async function loadResumen() {
       <div class="section-title" style="margin-top:20px">📅 ${state.anio} MES A MES</div>
       <div class="mes-list">${mesRows}</div>
 
+      ${stackData ? `
       <div class="section-title" style="margin-top:20px">🎯 APILADO POR CATEGORÍA</div>
       <div class="stack-legend">${
         Object.values(stackData.categorias).map(c =>
           `<span class="stack-legend-item"><span class="stack-legend-dot" style="background:${c.color}"></span>${c.nombre}</span>`
         ).join('')
       }</div>
-      <div class="stack-chart">${stackRows}</div>
+      <div class="stack-chart">${stackRows}</div>` : ''}
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
