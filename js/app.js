@@ -22,19 +22,50 @@ const MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun',
                      'Jul','Ago','Sep','Oct','Nov','Dic'];
 
 function periodNavHTML(screen) {
-  const onMes = screen === 'resumen' ? 'selMesResumen' : 'selMesMov';
-  const opts = MESES.slice(1).map((n, i) => {
+  const opts = MESES_CORTO.slice(1).map((n, i) => {
     const mes = i + 1;
-    return `<option value="${mes}"${mes === state.mes ? ' selected' : ''}>${n}</option>`;
+    return `<div class="mes-option${mes === state.mes ? ' selected' : ''}" onclick="selMes('${screen}',${mes})">${n}</div>`;
   }).join('');
   return `
     <div class="period-nav">
       <button class="nav-btn-sm" onclick="prevAnio('${screen}')">◀</button>
-      <select class="mes-select" onchange="${onMes}(parseInt(this.value))">${opts}</select>
+      <div class="mes-dropdown" id="mes-dd-${screen}">
+        <button class="mes-trigger" onclick="toggleMesMenu('${screen}',event)">
+          <span>${MESES[state.mes]}</span><span class="mes-arrow">▾</span>
+        </button>
+        <div class="mes-menu hidden">${opts}</div>
+      </div>
       <span class="year-label">${state.anio}</span>
       <button class="nav-btn-sm" onclick="nextAnio('${screen}')">▶</button>
     </div>`;
 }
+
+window.toggleMesMenu = (screen, e) => {
+  if (e) e.stopPropagation();
+  const dd = $(`mes-dd-${screen}`);
+  if (!dd) return;
+  document.querySelectorAll('.mes-dropdown.open').forEach(d => {
+    if (d !== dd) { d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden'); }
+  });
+  const open = dd.classList.toggle('open');
+  dd.querySelector('.mes-menu').classList.toggle('hidden', !open);
+};
+
+window.selMes = (screen, mes) => {
+  state.mes = mes;
+  document.querySelectorAll('.mes-dropdown.open').forEach(d => {
+    d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden');
+  });
+  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+};
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.mes-dropdown')) {
+    document.querySelectorAll('.mes-dropdown.open').forEach(d => {
+      d.classList.remove('open'); d.querySelector('.mes-menu')?.classList.add('hidden');
+    });
+  }
+});
 
 function mobImg(mobId, emoji, size = 28) {
   if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
@@ -92,8 +123,13 @@ async function loadResumen() {
         <div id="cat-detail-${cid}" class="cat-detail hidden"></div>`;
     }).join('') || `<div class="empty" style="padding:16px">Sin gastos este mes</div>`;
 
-    // Barras mes a mes simples
-    const maxMes = Math.max(1, ...yearly.meses.map(m => parseInt(m.total)));
+    // Barras mes a mes — totales + estadísticas año
+    const mesNums = yearly.meses.map(m => parseInt(m.total));
+    const maxMes = Math.max(1, ...mesNums);
+    const mesesConGasto = mesNums.filter(v => v > 0);
+    const totalAnio = mesNums.reduce((a,b) => a+b, 0);
+    const promedio  = mesesConGasto.length ? Math.round(totalAnio / mesesConGasto.length) : 0;
+    const mesMaxIdx = mesNums.indexOf(maxMes);
     const mesActual = state.mes;
     const mesRows = yearly.meses.map(m => {
       const pct = Math.round((parseInt(m.total) / maxMes) * 100);
@@ -102,13 +138,25 @@ async function loadResumen() {
         <div class="mes-row ${isActual ? 'mes-actual' : ''}" onclick="irAMes(${m.mes})">
           <span class="mes-row-label">${m.nombre}</span>
           <div class="mes-bar-bg">
-            <div class="mes-bar-fill" style="width:${pct}%;${isActual ? 'background:var(--gold)' : ''}"></div>
+            <div class="mes-bar-fill" style="width:${pct}%"></div>
           </div>
           <span class="mes-row-total">${parseInt(m.total) > 0 ? fmt(m.total) : '—'}</span>
         </div>`;
     }).join('');
 
     // Gráfico de barras apiladas vertical por categoría y mes
+    let stackTotalAnio = 0;
+    const catTotalsAnio = {};
+    if (stackData) {
+      stackData.meses.forEach(m => {
+        m.categorias.forEach(c => {
+          const v = parseInt(c.total);
+          stackTotalAnio += v;
+          catTotalsAnio[c.categoria_id] = (catTotalsAnio[c.categoria_id] || 0) + v;
+        });
+      });
+    }
+
     const stackRows = stackData
       ? (() => {
           const mesesConDatos = stackData.meses.filter(m => parseInt(m.total) > 0);
@@ -132,6 +180,19 @@ async function loadResumen() {
         })()
       : '';
 
+    // Leyenda enriquecida con totales por categoría
+    const stackLegend = stackData
+      ? Object.entries(stackData.categorias)
+          .map(([cid, c]) => ({ cid, ...c, total: catTotalsAnio[cid] || 0 }))
+          .sort((a,b) => b.total - a.total)
+          .map(c => `
+            <span class="vstack-legend-item">
+              <span class="vstack-legend-dot" style="background:${c.color};color:${c.color}"></span>
+              <span class="vstack-legend-name">${c.nombre}</span>
+              <span class="vstack-legend-amt">${fmtShort(c.total)}</span>
+            </span>`).join('')
+      : '';
+
     el.innerHTML = `
       ${periodNavHTML('resumen')}
 
@@ -144,19 +205,34 @@ async function loadResumen() {
       </div>
 
       <div class="section-title">📊 GASTO POR CATEGORÍA</div>
+      <div class="section-sub">Toca una categoría para ver sus movimientos del mes.</div>
       <div class="cat-list">${catRows}</div>
 
-      <div class="section-title" style="margin-top:20px">📅 ${state.anio} MES A MES</div>
+      <div class="section-title" style="margin-top:22px">📅 ${state.anio} MES A MES</div>
+      <div class="section-sub">
+        Total año <b>${fmt(totalAnio)}</b> · Promedio mensual <b>${fmt(promedio)}</b> · Máximo
+        <b>${MESES[mesMaxIdx+1] || '—'} ${maxMes>0?fmtShort(maxMes):''}</b>
+      </div>
+      <div class="mes-axis-label"><span>$0</span><span>${fmtShort(maxMes)}</span></div>
       <div class="mes-list">${mesRows}</div>
 
-      ${stackData ? `
-      <div class="section-title" style="margin-top:20px">🎯 APILADO POR CATEGORÍA</div>
-      <div class="vstack-legend">${
-        Object.values(stackData.categorias).map(c =>
-          `<span class="vstack-legend-item"><span class="vstack-legend-dot" style="background:${c.color}"></span>${c.nombre}</span>`
-        ).join('')
-      }</div>
-      <div class="vstack-chart">${stackRows}</div>` : ''}
+      ${stackData ? (() => {
+        const maxStack = Math.max(1, ...stackData.meses.map(m=>parseInt(m.total)));
+        return `
+      <div class="section-title" style="margin-top:22px">🎯 APILADO POR CATEGORÍA</div>
+      <div class="section-sub">Cada columna es un mes. La altura es el gasto y los colores son las categorías. Toca para ir al detalle.</div>
+      <div class="chart-card">
+        <div class="vstack-chart-area">
+          <div class="vstack-yaxis">
+            <span>${fmtShort(maxStack)}</span>
+            <span>${fmtShort(maxStack/2)}</span>
+            <span>$0</span>
+          </div>
+          <div class="vstack-chart">${stackRows}</div>
+        </div>
+        <div class="vstack-legend" style="margin-top:14px;border-bottom:none;padding-bottom:0">${stackLegend}</div>
+      </div>`;
+      })() : ''}
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
