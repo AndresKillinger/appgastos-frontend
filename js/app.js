@@ -14,6 +14,7 @@ const state = {
 
 const $ = id => document.getElementById(id);
 const fmt = n => '$' + Math.abs(parseInt(n || 0)).toLocaleString('es-CL');
+const fmtShort = n => { const v = Math.abs(parseInt(n||0)); return v>=1e6?'$'+(v/1e6).toFixed(1).replace('.0','')+'M':v>=1000?'$'+Math.round(v/1000)+'k':'$'+v; };
 const fmtFecha = iso => { const [y,m,d] = iso.split('-'); return `${d}/${m}/${y}`; };
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -88,25 +89,28 @@ async function loadResumen() {
         </div>`;
     }).join('');
 
-    // Gráfico de barras apiladas por categoría y mes
+    // Gráfico de barras apiladas vertical por categoría y mes
     const stackRows = stackData
-      ? stackData.meses
-          .filter(m => parseInt(m.total) > 0)
-          .map(m => {
+      ? (() => {
+          const mesesConDatos = stackData.meses.filter(m => parseInt(m.total) > 0);
+          const maxTotal = Math.max(1, ...mesesConDatos.map(m => parseInt(m.total)));
+          return mesesConDatos.map(m => {
             const isActual = m.mes === mesActual;
+            const pct = Math.round((parseInt(m.total) / maxTotal) * 100);
             const segs = m.categorias.map(c => {
               const info = stackData.categorias[String(c.categoria_id)];
-              const color = info?.color || '#888888';
-              const nombre = info?.nombre || 'Sin cat';
-              return `<div class="stack-seg" style="flex:${parseInt(c.total)};background:${color}" title="${nombre}: ${fmt(c.total)}"></div>`;
+              return `<div class="vstack-seg" style="flex:${parseInt(c.total)};background:${info?.color||'#888888'}" title="${info?.nombre||'Sin cat'}: ${fmt(c.total)}"></div>`;
             }).join('');
             return `
-              <div class="stack-row ${isActual ? 'stack-row-active' : ''}" onclick="irAMes(${m.mes})">
-                <span class="stack-label">${m.nombre}</span>
-                <div class="stack-bar">${segs}</div>
-                <span class="stack-total">${fmt(m.total)}</span>
+              <div class="vstack-col${isActual?' vstack-col-active':''}" onclick="irAMes(${m.mes})">
+                <span class="vstack-total">${fmtShort(m.total)}</span>
+                <div class="vstack-bar-wrap">
+                  <div class="vstack-bar" style="height:${pct}%">${segs}</div>
+                </div>
+                <span class="vstack-label">${m.nombre}</span>
               </div>`;
-          }).join('') || `<div class="empty" style="padding:8px">Sin datos</div>`
+          }).join('') || `<div class="empty" style="padding:8px">Sin datos</div>`;
+        })()
       : '';
 
     el.innerHTML = `
@@ -131,12 +135,12 @@ async function loadResumen() {
 
       ${stackData ? `
       <div class="section-title" style="margin-top:20px">🎯 APILADO POR CATEGORÍA</div>
-      <div class="stack-legend">${
+      <div class="vstack-legend">${
         Object.values(stackData.categorias).map(c =>
-          `<span class="stack-legend-item"><span class="stack-legend-dot" style="background:${c.color}"></span>${c.nombre}</span>`
+          `<span class="vstack-legend-item"><span class="vstack-legend-dot" style="background:${c.color}"></span>${c.nombre}</span>`
         ).join('')
       }</div>
-      <div class="stack-chart">${stackRows}</div>` : ''}
+      <div class="vstack-chart">${stackRows}</div>` : ''}
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
@@ -255,7 +259,9 @@ window.abrirModalDesde = (movId) => {
   window._currentMovId = movId;
 
   $('modal-desc').textContent  = cleanDesc(mov.descripcion);
-  $('modal-monto').textContent = `${mov.tipo === 'abono' ? '+' : '-'}${fmt(mov.monto)}`;
+  const montoEl = $('modal-monto');
+  montoEl.textContent = `${mov.tipo === 'abono' ? '+' : '-'}${fmt(mov.monto)}`;
+  montoEl.className = `modal-monto${mov.tipo === 'abono' ? ' modal-monto-abono' : ''}`;
   $('modal-fecha').textContent = `📅 ${fmtFecha(mov.fecha)}`;
   $('modal-contador').textContent = mov.categoria
     ? `${mov.categoria.icono} ${mov.categoria.nombre}`
