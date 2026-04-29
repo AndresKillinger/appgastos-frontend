@@ -12,6 +12,7 @@ const state = {
   movimientosList: [],
   lineYears: [new Date().getFullYear()], // años seleccionados para el line chart
   hiddenLineCats: new Set(),             // categoria_ids ocultos en el line chart
+  lineZoom: 1,                           // 1, 2, 4, 10 — zoom Y del line chart
 };
 
 const $ = id => document.getElementById(id);
@@ -163,7 +164,9 @@ function buildLineChartSVG(yearsData) {
   const N = series.length;
   const xStep = N > 1 ? innerW / (N - 1) : innerW;
 
-  const maxVal = Math.max(1, ...series.flatMap(p => visibleCats.map(cid => p.byCat[cid] || 0)));
+  const autoMax = Math.max(1, ...series.flatMap(p => visibleCats.map(cid => p.byCat[cid] || 0)));
+  const zoom = state.lineZoom || 1;
+  const maxVal = autoMax / zoom;
 
   // Grid y eje Y (3 líneas: 0, max/2, max)
   const yLevels = [0, maxVal / 2, maxVal];
@@ -173,21 +176,23 @@ function buildLineChartSVG(yearsData) {
             <text x="${padL - 4}" y="${y + 3}" text-anchor="end" fill="#b3b3dd" font-family="VT323" font-size="10">${fmtShort(v)}</text>`;
   }).join('');
 
-  // Líneas por categoría (solo las visibles)
+  // Líneas por categoría (solo las visibles). Cuando zoom > 1, los valores que exceden
+  // se clampan al tope del eje (padT) para indicar visualmente que están fuera de rango.
   const lines = visibleCats.map(cid => {
     const cat = catInfo[cid];
     const color = pickColor(cid, cat?.color);
     const pts = series.map((p, i) => {
       const x = padL + i * xStep;
       const v = p.byCat[cid] || 0;
-      const y = padT + innerH - (v / maxVal) * innerH;
+      const y = Math.max(padT, padT + innerH - (v / maxVal) * innerH);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
     const dots = series.map((p, i) => {
       const x = padL + i * xStep;
       const v = p.byCat[cid] || 0;
-      const y = padT + innerH - (v / maxVal) * innerH;
-      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${color}"><title>${cat?.nombre || 'Sin cat'} · ${p.label}: ${fmt(v)}</title></circle>`;
+      const overflow = v > maxVal;
+      const y = Math.max(padT, padT + innerH - (v / maxVal) * innerH);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${overflow ? 1.5 : 2.4}" fill="${color}" opacity="${overflow ? 0.5 : 1}"><title>${cat?.nombre || 'Sin cat'} · ${p.label}: ${fmt(v)}${overflow ? ' (fuera de rango)' : ''}</title></circle>`;
     }).join('');
     return `<polyline points="${pts}" stroke="${color}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round" filter="url(#lineGlow)"/>${dots}`;
   }).join('');
@@ -238,6 +243,19 @@ function lineYearSelectorHTML() {
   return years.map(y => {
     const active = state.lineYears.includes(y);
     return `<button class="line-year-pill${active ? ' active' : ''}" onclick="toggleLineYear(${y})">${y}</button>`;
+  }).join('');
+}
+
+window.setLineZoom = (z) => {
+  state.lineZoom = z;
+  loadResumen();
+};
+
+function lineZoomSelectorHTML() {
+  const opts = [1, 2, 4, 10];
+  return opts.map(z => {
+    const active = (state.lineZoom || 1) === z;
+    return `<button class="line-zoom-pill${active ? ' active' : ''}" onclick="setLineZoom(${z})">${z}×</button>`;
   }).join('');
 }
 
@@ -444,7 +462,13 @@ async function loadResumen() {
 
       <div class="section-title" style="margin-top:22px">📈 EVOLUCIÓN POR CATEGORÍA</div>
       <div class="section-sub">Cada línea es una categoría a través de los meses. Selecciona uno o varios años para comparar.</div>
-      <div class="line-year-pills">${lineYearSelectorHTML()}</div>
+      <div class="line-controls">
+        <div class="line-year-pills">${lineYearSelectorHTML()}</div>
+        <div class="line-zoom-row">
+          <span class="line-zoom-label">Zoom Y</span>
+          <div class="line-zoom-pills">${lineZoomSelectorHTML()}</div>
+        </div>
+      </div>
       <div class="chart-card">${buildLineChartSVG(lineYearsData)}</div>
     `;
   } catch(e) {

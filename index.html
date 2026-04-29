@@ -434,8 +434,29 @@
     .vstack-label { font-size: 11px; color: var(--muted); height: 18px; display: flex; align-items: center; flex-shrink: 0; letter-spacing: .3px; }
 
     /* ── Line chart (evolución por categoría) ── */
+    .line-controls { margin-bottom: 10px; }
     .line-year-pills {
-      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+    }
+    .line-zoom-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .line-zoom-label {
+      font-size: 13px; color: var(--muted); flex-shrink: 0; letter-spacing: .3px;
+    }
+    .line-zoom-pills { display: flex; gap: 4px; flex: 1; }
+    .line-zoom-pill {
+      flex: 1; max-width: 60px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      color: var(--muted); font-family: var(--fp); font-size: 7px;
+      padding: 7px 4px; cursor: pointer; transition: all .15s;
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .line-zoom-pill:active { transform: scale(.95); }
+    .line-zoom-pill.active {
+      background: rgba(92,198,255,.12); border-color: var(--blue); color: var(--blue);
+      box-shadow: 0 0 10px rgba(92,198,255,.25), inset 0 1px 0 rgba(255,255,255,.06);
     }
     .line-year-pill {
       background: var(--surface);
