@@ -10,6 +10,8 @@ const state = {
   cuenta: '',            // '' todos | 'cc' corriente | 'tc' tarjeta
   categorias: [],
   movimientosList: [],
+  lineYears: [new Date().getFullYear()], // años seleccionados para el line chart
+  hiddenLineCats: new Set(),             // categoria_ids ocultos en el line chart
 };
 
 const $ = id => document.getElementById(id);
@@ -26,9 +28,7 @@ function periodNavHTML(screen) {
     const mes = i + 1;
     return `<div class="mes-option${mes === state.mes ? ' selected' : ''}" onclick="selMes('${screen}',${mes})">${n}</div>`;
   }).join('');
-  const currentYear = new Date().getFullYear();
-  const years = [];
-  for (let y = currentYear - 5; y <= currentYear + 1; y++) years.push(y);
+  const years = [2025, 2026, 2027, 2028, 2029];
   const yearOpts = years.map(y =>
     `<div class="mes-option${y === state.anio ? ' selected' : ''}" onclick="selAnio('${screen}',${y})">${y}</div>`
   ).join('');
@@ -114,6 +114,152 @@ function pickColor(cid, color) {
   return CAT_PALETTE[Math.abs(h) % CAT_PALETTE.length];
 }
 
+// Construye un SVG de líneas: una línea por categoría a través de los meses (multi-año concatenado).
+// `yearsData` = array de respuestas de getYearlyCategoryBreakdown ordenadas por año asc.
+function buildLineChartSVG(yearsData) {
+  if (!yearsData.length) return '';
+
+  // Aplanar a serie cronológica de puntos: { label, anio, mes, byCat: {cid: total} }
+  const series = [];
+  yearsData.forEach(yd => {
+    if (!yd) return;
+    yd.meses.forEach(m => {
+      const byCat = {};
+      m.categorias.forEach(c => { byCat[c.categoria_id] = parseInt(c.total); });
+      series.push({
+        anio: yd.anio,
+        mes: m.mes,
+        label: `${m.nombre.slice(0,3)} ${String(yd.anio).slice(2)}`,
+        byCat,
+      });
+    });
+  });
+  if (!series.length) return '<div class="empty" style="padding:8px">Sin datos</div>';
+
+  // Categorías presentes (unión de todas las breakdowns) + total acumulado para rankear
+  const catInfo = {};
+  const catTotals = {};
+  yearsData.forEach(yd => {
+    if (!yd) return;
+    Object.entries(yd.categorias).forEach(([cid, c]) => { catInfo[cid] = c; });
+  });
+  series.forEach(p => Object.entries(p.byCat).forEach(([cid, v]) => {
+    catTotals[cid] = (catTotals[cid] || 0) + v;
+  }));
+
+  // Top 8 categorías por total. Cualquiera puede ser ocultada vía leyenda.
+  const allCats = Object.entries(catTotals)
+    .sort((a,b) => b[1]-a[1])
+    .slice(0, 8)
+    .map(([cid]) => cid);
+  const hidden = state.hiddenLineCats;
+  const visibleCats = allCats.filter(cid => !hidden.has(cid));
+
+  // SVG layout
+  const W = 360, H = 220;
+  const padL = 42, padR = 14, padT = 14, padB = 38;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const N = series.length;
+  const xStep = N > 1 ? innerW / (N - 1) : innerW;
+
+  const maxVal = Math.max(1, ...series.flatMap(p => visibleCats.map(cid => p.byCat[cid] || 0)));
+
+  // Grid y eje Y (3 líneas: 0, max/2, max)
+  const yLevels = [0, maxVal / 2, maxVal];
+  const grid = yLevels.map((v, i) => {
+    const y = padT + innerH - (v / maxVal) * innerH;
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(120,120,255,.15)" stroke-dasharray="2 3"/>
+            <text x="${padL - 4}" y="${y + 3}" text-anchor="end" fill="#b3b3dd" font-family="VT323" font-size="10">${fmtShort(v)}</text>`;
+  }).join('');
+
+  // Líneas por categoría (solo las visibles)
+  const lines = visibleCats.map(cid => {
+    const cat = catInfo[cid];
+    const color = pickColor(cid, cat?.color);
+    const pts = series.map((p, i) => {
+      const x = padL + i * xStep;
+      const v = p.byCat[cid] || 0;
+      const y = padT + innerH - (v / maxVal) * innerH;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const dots = series.map((p, i) => {
+      const x = padL + i * xStep;
+      const v = p.byCat[cid] || 0;
+      const y = padT + innerH - (v / maxVal) * innerH;
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" fill="${color}"><title>${cat?.nombre || 'Sin cat'} · ${p.label}: ${fmt(v)}</title></circle>`;
+    }).join('');
+    return `<polyline points="${pts}" stroke="${color}" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round" filter="url(#lineGlow)"/>${dots}`;
+  }).join('');
+
+  // X-axis labels — para no saturar, mostrar máx ~12 etiquetas
+  const labelEvery = Math.max(1, Math.ceil(N / 12));
+  const xLabels = series.map((p, i) => {
+    if (i % labelEvery !== 0 && i !== N - 1) return '';
+    const x = padL + i * xStep;
+    return `<text x="${x.toFixed(1)}" y="${H - 22}" text-anchor="middle" fill="#b3b3dd" font-family="VT323" font-size="10">${p.label.slice(0,3)}</text>
+            <text x="${x.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#9999cc" font-family="VT323" font-size="9">'${p.label.slice(-2)}</text>`;
+  }).join('');
+
+  // Leyenda interactiva — clic para mostrar/ocultar categoría
+  const legend = allCats.map(cid => {
+    const cat = catInfo[cid];
+    const color = pickColor(cid, cat?.color);
+    const isHidden = hidden.has(cid);
+    return `<button class="line-legend-item${isHidden ? ' hidden-cat' : ''}" onclick="toggleLineCat('${cid}')">
+      <span class="line-legend-dot" style="background:${isHidden ? 'transparent' : color};border-color:${color};box-shadow:${isHidden ? 'none' : `0 0 6px ${color}`}"></span>
+      <span>${cat?.nombre || 'Sin cat'}</span>
+    </button>`;
+  }).join('');
+
+  return `
+    <svg class="line-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">
+      <defs>
+        <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.4" result="blur"/>
+          <feMerge>
+            <feMergeNode in="blur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+      </defs>
+      ${grid}
+      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
+      <line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
+      ${lines}
+      ${xLabels}
+    </svg>
+    <div class="line-legend">${legend}</div>
+  `;
+}
+
+function lineYearSelectorHTML() {
+  const years = [2025, 2026, 2027, 2028, 2029];
+  return years.map(y => {
+    const active = state.lineYears.includes(y);
+    return `<button class="line-year-pill${active ? ' active' : ''}" onclick="toggleLineYear(${y})">${y}</button>`;
+  }).join('');
+}
+
+window.toggleLineCat = (cid) => {
+  const key = String(cid);
+  if (state.hiddenLineCats.has(key)) state.hiddenLineCats.delete(key);
+  else state.hiddenLineCats.add(key);
+  loadResumen();
+};
+
+window.toggleLineYear = (y) => {
+  const i = state.lineYears.indexOf(y);
+  if (i >= 0) {
+    if (state.lineYears.length === 1) return; // siempre debe quedar al menos uno
+    state.lineYears.splice(i, 1);
+  } else {
+    state.lineYears.push(y);
+  }
+  state.lineYears.sort();
+  loadResumen();
+};
+
 function mobImg(mobId, emoji, size = 28) {
   if (!mobId) return `<span style="font-size:${size}px;line-height:1">${emoji}</span>`;
   return `<img src="https://maplestory.io/api/GMS/latest/mob/${mobId}/render/stand"
@@ -137,10 +283,14 @@ async function loadResumen() {
   const el = $('resumen-content');
   el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
   try {
-    const [d, yearly, stackData] = await Promise.all([
+    // Asegurar que el año actualmente seleccionado esté en lineYears (mejor UX al cambiar de año)
+    if (!state.lineYears.includes(state.anio)) state.lineYears.push(state.anio);
+    state.lineYears.sort();
+    const [d, yearly, stackData, ...lineYearsData] = await Promise.all([
       getSummary(state.anio, state.mes),
       getYearlySummary(state.anio),
       getYearlyCategoryBreakdown(state.anio).catch(() => null),
+      ...state.lineYears.map(y => getYearlyCategoryBreakdown(y).catch(() => null)),
     ]);
 
     const totalGasto  = parseInt(d.total_cargos);
@@ -291,6 +441,11 @@ async function loadResumen() {
         <div class="vstack-legend" style="margin-top:14px;border-bottom:none;padding-bottom:0">${stackLegend}</div>
       </div>`;
       })() : ''}
+
+      <div class="section-title" style="margin-top:22px">📈 EVOLUCIÓN POR CATEGORÍA</div>
+      <div class="section-sub">Cada línea es una categoría a través de los meses. Selecciona uno o varios años para comparar.</div>
+      <div class="line-year-pills">${lineYearSelectorHTML()}</div>
+      <div class="chart-card">${buildLineChartSVG(lineYearsData)}</div>
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
@@ -524,13 +679,62 @@ window.guardarNuevaCat = async () => {
 };
 
 // ── Sync ──────────────────────────────────────────────────────────────────────
+window.cerrarModalSync = () => $('modal-sync').classList.add('hidden');
+
+function renderSyncResult(d) {
+  const procs = d.procesados || [];
+  const ok    = procs.filter(p => !p.error);
+  const errs  = procs.filter(p =>  p.error);
+  const ccCount = ok.filter(p => p.tipo === 'cc').length;
+  const tcCount = ok.filter(p => p.tipo === 'tc').length;
+
+  if (procs.length === 0) {
+    return `<div class="sync-empty">
+      <span class="sync-empty-icon">🐌</span>
+      <div>Sin cartolas nuevas</div>
+      <div style="font-size:13px;margin-top:6px">Todo al día — Gmail no tiene correos pendientes.</div>
+    </div>`;
+  }
+
+  const summary = `<div class="sync-summary">
+    <div class="sync-pill"><span class="sync-pill-num">${ok.length}</span><span class="sync-pill-label">📬 nuevas</span></div>
+    <div class="sync-pill"><span class="sync-pill-num">${ccCount}</span><span class="sync-pill-label">🏦 CC</span></div>
+    <div class="sync-pill"><span class="sync-pill-num">${tcCount}</span><span class="sync-pill-label">💳 TC</span></div>
+  </div>`;
+
+  const rows = procs.map(p => {
+    if (p.error) {
+      return `<div class="sync-row error">
+        <span class="sync-row-icon">⚠️</span>
+        <div class="sync-row-body">
+          <span class="sync-row-tipo sync-row-${p.tipo || 'cc'}">${(p.tipo || '??').toUpperCase()}</span>
+          <span class="sync-row-periodo">Error</span>
+          <div class="sync-row-detail">${(p.error || '').slice(0,80)}</div>
+        </div>
+      </div>`;
+    }
+    const isCC = p.tipo === 'cc';
+    return `<div class="sync-row">
+      <span class="sync-row-icon">${isCC ? '🏦' : '💳'}</span>
+      <div class="sync-row-body">
+        <span class="sync-row-tipo sync-row-${p.tipo}">${p.tipo.toUpperCase()}</span>
+        <span class="sync-row-periodo">${p.periodo || '—'}</span>
+        <div class="sync-row-detail">${p.movimientos || 0} movimiento${p.movimientos === 1 ? '' : 's'} importado${p.movimientos === 1 ? '' : 's'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return summary + `<div class="sync-rows">${rows}</div>`;
+}
+
 window.syncData = async () => {
   const btn = $('btn-sync');
   btn.disabled = true; btn.textContent = '⏳';
   try {
     const d = await syncEmail();
+    $('sync-result-content').innerHTML = renderSyncResult(d);
+    $('modal-sync').classList.remove('hidden');
     const nuevas = (d.procesados || []).filter(p => !p.error).length;
-    showToast(nuevas > 0 ? `🍄 ${nuevas} cartola(s) nueva(s)!` : '🐌 Sin cartolas nuevas');
     if (nuevas > 0) loadResumen();
   } catch { showToast('Error al sincronizar', true); }
   finally { btn.disabled = false; btn.textContent = '🔄'; }
@@ -557,6 +761,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   $('modal-categoria').addEventListener('click', e => {
     if (e.target === $('modal-categoria')) cerrarModal();
+  });
+
+  $('modal-sync').addEventListener('click', e => {
+    if (e.target === $('modal-sync')) cerrarModalSync();
   });
 
   try { state.categorias = await getCategories(); } catch {}
