@@ -11,8 +11,9 @@ const state = {
   categorias: [],
   movimientosList: [],
   lineYears: [new Date().getFullYear()], // años seleccionados para el line chart
-  hiddenLineCats: new Set(),             // categoria_ids ocultos en el line chart
+  visibleLineCats: new Set(),            // categoria_ids visibles en el line chart (vacío = ninguno)
   lineZoom: 1,                           // 1, 2, 4, 10 — zoom Y del line chart
+  lineYearsDataCache: null,              // cache para re-renderizar sin volver a fetchar
 };
 
 const $ = id => document.getElementById(id);
@@ -107,13 +108,25 @@ const CAT_PALETTE = [
   '#7bff5b', '#5bd1ff'
 ];
 const _isDefaultColor = c => !c || /^#?(8{3}|8{6})$/i.test(String(c).replace('#',''));
+const CUSTOM_COLORS_KEY = 'maple-cat-colors';
+let customCatColors = {};
+try { customCatColors = JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY) || '{}'); } catch {}
+
 function pickColor(cid, color) {
-  if (color && !_isDefaultColor(color)) return color;
   const key = String(cid ?? 'sin');
+  if (customCatColors[key]) return customCatColors[key];
+  if (color && !_isDefaultColor(color)) return color;
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
   return CAT_PALETTE[Math.abs(h) % CAT_PALETTE.length];
 }
+
+window.setCatColor = (cid, hex) => {
+  const key = String(cid);
+  customCatColors[key] = hex;
+  try { localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(customCatColors)); } catch {}
+  if (typeof renderLineChartSection === 'function') renderLineChartSection();
+};
 
 // Construye un SVG de líneas: una línea por categoría a través de los meses (multi-año concatenado).
 // `yearsData` = array de respuestas de getYearlyCategoryBreakdown ordenadas por año asc.
@@ -148,13 +161,12 @@ function buildLineChartSVG(yearsData) {
     catTotals[cid] = (catTotals[cid] || 0) + v;
   }));
 
-  // Top 8 categorías por total. Cualquiera puede ser ocultada vía leyenda.
+  // Top 8 categorías por total. El usuario las activa una a una desde la leyenda.
   const allCats = Object.entries(catTotals)
     .sort((a,b) => b[1]-a[1])
     .slice(0, 8)
     .map(([cid]) => cid);
-  const hidden = state.hiddenLineCats;
-  const visibleCats = allCats.filter(cid => !hidden.has(cid));
+  const visibleCats = allCats.filter(cid => state.visibleLineCats.has(cid));
 
   // SVG layout
   const W = 360, H = 220;
@@ -168,11 +180,11 @@ function buildLineChartSVG(yearsData) {
   const zoom = state.lineZoom || 1;
   const maxVal = autoMax / zoom;
 
-  // Grid y eje Y (3 líneas: 0, max/2, max)
-  const yLevels = [0, maxVal / 2, maxVal];
-  const grid = yLevels.map((v, i) => {
+  // Grid y eje Y (5 líneas: 0, 25%, 50%, 75%, 100% del max)
+  const yLevels = [0, maxVal * 0.25, maxVal * 0.5, maxVal * 0.75, maxVal];
+  const grid = yLevels.map((v) => {
     const y = padT + innerH - (v / maxVal) * innerH;
-    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(120,120,255,.15)" stroke-dasharray="2 3"/>
+    return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(120,120,255,.13)" stroke-dasharray="2 3"/>
             <text x="${padL - 4}" y="${y + 3}" text-anchor="end" fill="#b3b3dd" font-family="VT323" font-size="10">${fmtShort(v)}</text>`;
   }).join('');
 
@@ -206,34 +218,47 @@ function buildLineChartSVG(yearsData) {
             <text x="${x.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#9999cc" font-family="VT323" font-size="9">'${p.label.slice(-2)}</text>`;
   }).join('');
 
-  // Leyenda interactiva — clic para mostrar/ocultar categoría
+  // Leyenda interactiva
+  // - Toca el círculo de color → abre selector de color (HTML5 native picker)
+  // - Toca el nombre → muestra/oculta la línea
   const legend = allCats.map(cid => {
     const cat = catInfo[cid];
     const color = pickColor(cid, cat?.color);
-    const isHidden = hidden.has(cid);
-    return `<button class="line-legend-item${isHidden ? ' hidden-cat' : ''}" onclick="toggleLineCat('${cid}')">
-      <span class="line-legend-dot" style="background:${isHidden ? 'transparent' : color};border-color:${color};box-shadow:${isHidden ? 'none' : `0 0 6px ${color}`}"></span>
-      <span>${cat?.nombre || 'Sin cat'}</span>
-    </button>`;
+    const isVisible = state.visibleLineCats.has(cid);
+    return `<div class="line-legend-item${isVisible ? '' : ' hidden-cat'}">
+      <input type="color" class="line-legend-dot-input" value="${color}"
+        onchange="setCatColor('${cid}', this.value)"
+        onclick="event.stopPropagation()"
+        title="Cambiar color"
+        aria-label="Color de ${cat?.nombre || 'categoría'}">
+      <button class="line-legend-name-btn" onclick="toggleLineCat('${cid}')">${cat?.nombre || 'Sin cat'}</button>
+    </div>`;
   }).join('');
 
+  const chartArea = visibleCats.length === 0
+    ? `<div class="line-empty">
+        <div class="line-empty-icon">📈</div>
+        <div>Toca una categoría en la leyenda<br>para empezar a ver el gráfico</div>
+      </div>`
+    : `<svg class="line-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">
+        <defs>
+          <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="1.4" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        ${grid}
+        <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
+        <line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
+        ${lines}
+        ${xLabels}
+      </svg>`;
+
   return `
-    <svg class="line-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img">
-      <defs>
-        <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="1.4" result="blur"/>
-          <feMerge>
-            <feMergeNode in="blur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-      </defs>
-      ${grid}
-      <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
-      <line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="rgba(120,120,255,.3)"/>
-      ${lines}
-      ${xLabels}
-    </svg>
+    ${chartArea}
     <div class="line-legend">${legend}</div>
   `;
 }
@@ -246,11 +271,6 @@ function lineYearSelectorHTML() {
   }).join('');
 }
 
-window.setLineZoom = (z) => {
-  state.lineZoom = z;
-  loadResumen();
-};
-
 function lineZoomSelectorHTML() {
   const opts = [1, 2, 4, 10];
   return opts.map(z => {
@@ -259,14 +279,38 @@ function lineZoomSelectorHTML() {
   }).join('');
 }
 
-window.toggleLineCat = (cid) => {
-  const key = String(cid);
-  if (state.hiddenLineCats.has(key)) state.hiddenLineCats.delete(key);
-  else state.hiddenLineCats.add(key);
-  loadResumen();
+// Re-renderiza solo el line chart (controles + gráfico) usando el cache de datos.
+// Así al togglear categorías, zoom o cambiar color NO se recarga toda la pantalla
+// y se preserva la posición de scroll.
+function renderLineChartSection() {
+  const el = document.getElementById('line-chart-section');
+  if (!el) return;
+  const data = state.lineYearsDataCache || [];
+  el.innerHTML = `
+    <div class="line-controls">
+      <div class="line-year-pills">${lineYearSelectorHTML()}</div>
+      <div class="line-zoom-row">
+        <span class="line-zoom-label">Zoom Y</span>
+        <div class="line-zoom-pills">${lineZoomSelectorHTML()}</div>
+      </div>
+    </div>
+    <div class="chart-card">${buildLineChartSVG(data)}</div>
+  `;
+}
+
+window.setLineZoom = (z) => {
+  state.lineZoom = z;
+  renderLineChartSection();
 };
 
-window.toggleLineYear = (y) => {
+window.toggleLineCat = (cid) => {
+  const key = String(cid);
+  if (state.visibleLineCats.has(key)) state.visibleLineCats.delete(key);
+  else state.visibleLineCats.add(key);
+  renderLineChartSection();
+};
+
+window.toggleLineYear = async (y) => {
   const i = state.lineYears.indexOf(y);
   if (i >= 0) {
     if (state.lineYears.length === 1) return; // siempre debe quedar al menos uno
@@ -275,7 +319,11 @@ window.toggleLineYear = (y) => {
     state.lineYears.push(y);
   }
   state.lineYears.sort();
-  loadResumen();
+  // Re-fetch solo los años de la línea, sin volver a recargar todo el resumen
+  state.lineYearsDataCache = await Promise.all(
+    state.lineYears.map(yy => getYearlyCategoryBreakdown(yy).catch(() => null))
+  );
+  renderLineChartSection();
 };
 
 function mobImg(mobId, emoji, size = 28) {
@@ -310,6 +358,7 @@ async function loadResumen() {
       getYearlyCategoryBreakdown(state.anio).catch(() => null),
       ...state.lineYears.map(y => getYearlyCategoryBreakdown(y).catch(() => null)),
     ]);
+    state.lineYearsDataCache = lineYearsData;
 
     const totalGasto  = parseInt(d.total_cargos);
     const totalAbonos = parseInt(d.total_abonos || 0);
@@ -462,14 +511,16 @@ async function loadResumen() {
 
       <div class="section-title" style="margin-top:22px">📈 EVOLUCIÓN POR CATEGORÍA</div>
       <div class="section-sub">Cada línea es una categoría a través de los meses. Selecciona uno o varios años para comparar.</div>
-      <div class="line-controls">
-        <div class="line-year-pills">${lineYearSelectorHTML()}</div>
-        <div class="line-zoom-row">
-          <span class="line-zoom-label">Zoom Y</span>
-          <div class="line-zoom-pills">${lineZoomSelectorHTML()}</div>
+      <div id="line-chart-section">
+        <div class="line-controls">
+          <div class="line-year-pills">${lineYearSelectorHTML()}</div>
+          <div class="line-zoom-row">
+            <span class="line-zoom-label">Zoom Y</span>
+            <div class="line-zoom-pills">${lineZoomSelectorHTML()}</div>
+          </div>
         </div>
+        <div class="chart-card">${buildLineChartSVG(lineYearsData)}</div>
       </div>
-      <div class="chart-card">${buildLineChartSVG(lineYearsData)}</div>
     `;
   } catch(e) {
     el.innerHTML = `<div class="error">Error cargando datos</div>`;
