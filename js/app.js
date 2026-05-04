@@ -762,12 +762,14 @@ function renderSyncResult(d) {
   const errs  = procs.filter(p =>  p.error);
   const ccCount = ok.filter(p => p.tipo === 'cc').length;
   const tcCount = ok.filter(p => p.tipo === 'tc').length;
+  const mergedCount = d.apple_pay_merged || 0;
 
   if (procs.length === 0) {
     return `<div class="sync-empty">
       <span class="sync-empty-icon">🐌</span>
       <div>Sin cartolas nuevas</div>
       <div style="font-size:13px;margin-top:6px">Todo al día — Gmail no tiene correos pendientes.</div>
+      ${mergedCount > 0 ? `<div style="font-size:13px;margin-top:8px;color:var(--green)">🔗 ${mergedCount} apple-pay fusionado${mergedCount === 1 ? '' : 's'} con TC</div>` : ''}
     </div>`;
   }
 
@@ -775,6 +777,7 @@ function renderSyncResult(d) {
     <div class="sync-pill"><span class="sync-pill-num">${ok.length}</span><span class="sync-pill-label">📬 nuevas</span></div>
     <div class="sync-pill"><span class="sync-pill-num">${ccCount}</span><span class="sync-pill-label">🏦 CC</span></div>
     <div class="sync-pill"><span class="sync-pill-num">${tcCount}</span><span class="sync-pill-label">💳 TC</span></div>
+    ${mergedCount > 0 ? `<div class="sync-pill"><span class="sync-pill-num">${mergedCount}</span><span class="sync-pill-label">🔗 fusionados</span></div>` : ''}
   </div>`;
 
   const rows = procs.map(p => {
