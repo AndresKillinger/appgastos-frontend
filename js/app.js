@@ -1,4 +1,4 @@
-import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory, addManual } from './api.js';
+import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory, addManual, deleteMovement } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -1154,6 +1154,27 @@ window.omitirCategoria = () => {
   const next = state.movimientosList.slice(idx + 1).find(m => !m.categoria_id);
   if (next) abrirModalDesde(next.id);
   else { cerrarModal(); showToast('✓ Todo categorizado'); }
+};
+
+window.eliminarMovActual = async () => {
+  const movId = window._currentMovId;
+  if (movId == null) return;
+  const mov = state.movimientosList.find(m => m.id === movId);
+  const label = mov ? `${cleanDesc(mov.descripcion)} · ${fmt(mov.monto)}` : `movimiento ${movId}`;
+  if (!confirm(`¿Eliminar este movimiento?\n\n${label}\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    await deleteMovement(movId);
+    // Sacarlo de la lista en memoria
+    state.movimientosList = state.movimientosList.filter(m => m.id !== movId);
+    showToast('✓ Movimiento eliminado');
+    // Si quedan sin categoría, abrir el siguiente; si no, cerrar modal
+    const next = state.movimientosList.find(m => !m.categoria_id);
+    if (next) abrirModalDesde(next.id);
+    else cerrarModal();
+    renderMovimientos();
+  } catch {
+    showToast('Error al eliminar', true);
+  }
 };
 
 window.toggleNuevaCat = () => $('nueva-cat-form').classList.toggle('hidden');

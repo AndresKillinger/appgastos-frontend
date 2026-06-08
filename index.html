@@ -703,6 +703,21 @@
     }
     .manual-tipo-btn.active { background: rgba(255,185,56,.1); border-color: var(--gold); color: var(--gold); }
     .manual-tipo-btn:active { transform: scale(.96); }
+
+    /* Botón eliminar movimiento (danger zone del modal categorizar) */
+    .modal-danger-zone {
+      margin-top: 18px; padding-top: 14px;
+      border-top: 1px dashed rgba(255,77,106,.25);
+    }
+    .btn-eliminar-mov {
+      width: 100%; padding: 11px;
+      background: rgba(255,77,106,.08);
+      border: 1px solid rgba(255,77,106,.45); border-radius: 8px;
+      color: var(--red); font-family: var(--fp); font-size: 7px;
+      cursor: pointer; letter-spacing: .5px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-eliminar-mov:active { background: rgba(255,77,106,.18); transform: scale(.98); }
     .line-legend {
       display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 8px;
       margin-top: 12px; padding-top: 10px;
@@ -1178,6 +1193,9 @@
           <input id="nc-color" class="nc-color" type="color" value="#888888">
         </div>
         <button class="btn-primary" style="font-size:8px;padding:10px" onclick="guardarNuevaCat()">⚔️ CREAR CATEGORÍA</button>
+      </div>
+      <div class="modal-danger-zone">
+        <button class="btn-eliminar-mov" onclick="eliminarMovActual()">🗑️ ELIMINAR ESTE MOVIMIENTO</button>
       </div>
     </div>
   </div>

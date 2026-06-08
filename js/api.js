@@ -93,6 +93,11 @@ export async function uploadPdfTC(pdfFile, rut) {
   return r.json();
 }
 
+export async function deleteMovement(movId) {
+  const r = await fetch(`${BASE}/movements/${movId}`, { method: 'DELETE' });
+  return r.json();
+}
+
 export async function addCreditCard({ fecha, descripcion, monto }) {
   const r = await fetch(`${BASE}/movements/credit-card`, {
     method: 'POST',
