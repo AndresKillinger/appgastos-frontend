@@ -70,28 +70,34 @@ const closeAllDropdowns = () => {
   });
 };
 
+const _reloadFor = (screen) => {
+  if (screen === 'resumen') return loadResumen();
+  if (screen === 'plan')    return loadPlan();
+  return loadMovimientos();
+};
+
 window.selMes = (screen, mes) => {
   state.mes = mes;
   closeAllDropdowns();
-  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+  _reloadFor(screen);
 };
 
 window.selAnio = (screen, anio) => {
   state.anio = anio;
   closeAllDropdowns();
-  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+  _reloadFor(screen);
 };
 
 window.prevMes = screen => {
   state.mes--;
   if (state.mes < 1) { state.mes = 12; state.anio--; }
-  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+  _reloadFor(screen);
 };
 
 window.nextMes = screen => {
   state.mes++;
   if (state.mes > 12) { state.mes = 1; state.anio++; }
-  if (screen === 'resumen') loadResumen(); else loadMovimientos();
+  _reloadFor(screen);
 };
 
 document.addEventListener('click', e => {
@@ -762,8 +768,7 @@ async function loadPlan() {
     const movs = movsResp.data || [];
     const gastoNeto = parseInt(d.gasto_neto ?? d.total_cargos) || 0;
 
-    // ── 1. Header con periodo + botón agregar
-    const periodTitle = `${MESES[state.mes]} ${state.anio}`;
+    // ── 1. Header con periodNav + botón agregar gasto
 
     // ── 2. Proyección
     const promPrev3 = prevSummaries.filter(s => s).map(s => parseInt(s.gasto_neto ?? s.total_cargos) || 0);
@@ -788,6 +793,22 @@ async function loadPlan() {
          </div>`
       : '';
 
+    // Suma de presupuestos por categoría (para marcador en la barra de proyección)
+    const sumCatBudgets = Object.entries(catBudgets)
+      .filter(([k]) => k !== '_total')
+      .reduce((s, [_, v]) => s + (parseInt(v) || 0), 0);
+
+    // Posición del marcador en la barra (0-150% del promedio histórico)
+    let budgetMarker = '';
+    if (promAvg > 0 && sumCatBudgets > 0) {
+      const markerPct = Math.min(150, Math.round(sumCatBudgets / promAvg * 100));
+      budgetMarker = `
+        <div class="proj-marker" style="left:${(markerPct / 150) * 100}%">
+          <div class="proj-marker-line"></div>
+          <div class="proj-marker-label">🎯 ${fmtShort(sumCatBudgets)}<br><span>tu tope</span></div>
+        </div>`;
+    }
+
     const projHTML = `
       <div class="proj-card ${projLevel}">
         <div class="proj-label">${finished ? '💥 GASTO TOTAL DEL MES' : '🔮 PROYECCIÓN FIN DE MES'}</div>
@@ -801,8 +822,16 @@ async function loadPlan() {
             : ' (no hay datos previos para comparar)'}
         </div>
         ${linearDifference}
-        ${promAvg > 0 ? `<div class="proj-progress"><div class="proj-progress-fill" style="width:${projPct}%"></div></div>` : ''}
-        ${promAvg > 0 ? `<div style="font-size:12px;color:var(--muted)">100% = promedio histórico</div>` : ''}
+        ${promAvg > 0 ? `
+          <div class="proj-progress-wrap">
+            <div class="proj-progress"><div class="proj-progress-fill" style="width:${(projPct / 150) * 100}%"></div></div>
+            ${budgetMarker}
+          </div>
+          <div class="proj-progress-scale">
+            <span>0</span>
+            <span style="left:66.67%">${fmtShort(promAvg)} (100%)</span>
+            <span style="right:0">${fmtShort(promAvg * 1.5)} (150%)</span>
+          </div>` : ''}
       </div>`;
 
     // ── 3. Presupuestos por categoría
@@ -958,8 +987,9 @@ async function loadPlan() {
 
     // ── Render
     el.innerHTML = `
+      ${periodNavHTML('plan')}
       <div class="plan-header">
-        <span class="plan-title">⚔️ ${periodTitle}</span>
+        <span class="plan-title">⚔️ MI PLAN</span>
         <button class="plan-add-btn" onclick="abrirModalManual()">➕ GASTO</button>
       </div>
 
