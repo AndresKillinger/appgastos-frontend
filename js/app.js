@@ -838,37 +838,43 @@ async function loadPlan() {
     const budgetCats = state.categorias.filter(c => c.es_gasto && catBudgets[c.id] > 0);
     const budgetByCat = {}; d.by_category.forEach(c => { budgetByCat[c.categoria_id] = parseInt(c.total) || 0; });
 
-    // 3a. Presupuesto TOTAL (independiente de los por-categoría)
-    const totalBudget = catBudgets['_total'] || 0;
+    // 3a. Presupuesto TOTAL = suma de los presupuestos por categoría (calculado automáticamente)
+    const totalBudget = Object.entries(catBudgets)
+      .filter(([k]) => k !== '_total')  // ignorar el viejo _total si quedó en localStorage
+      .reduce((s, [_, v]) => s + (parseInt(v) || 0), 0);
     let totalBudgetHTML = '';
     if (totalBudget > 0) {
-      const segmentsRaw = d.by_category
-        .filter(c => parseInt(c.total) > 0)
+      // Para cada presupuesto por categoría, mostramos el gasto real de esa categoría
+      // (capeado al monto del presupuesto, lo que excede se pinta como overflow rojo)
+      const segmentsRaw = state.categorias
+        .filter(c => catBudgets[c.id] > 0)
         .map(c => ({
-          cid: c.categoria_id ?? 0,
+          cid: c.id,
           name: c.nombre,
-          color: pickColor(c.categoria_id ?? 0, c.color),
-          total: parseInt(c.total),
+          color: pickColor(c.id, c.color),
+          spent: budgetByCat[c.id] || 0,
+          budget: catBudgets[c.id],
         }))
-        .sort((a,b) => b.total - a.total);
+        .sort((a,b) => b.spent - a.spent);
       const overPct = Math.round(gastoNeto / totalBudget * 100);
-      // Cada segmento ocupa su % del presupuesto. Si excede 100% se trunca visualmente al 100%.
+      // Cada segmento del bar = % del gasto de esa cat sobre el total budget.
+      // Si la cat se pasó de SU presupuesto, el exceso se muestra "fuera" del bar como rojo.
       let acumPct = 0;
       const segmentsHTML = segmentsRaw.map(s => {
-        const segPct = s.total / totalBudget * 100;
+        const segPct = s.spent / totalBudget * 100;
         if (acumPct >= 100) return '';
         const visiblePct = Math.min(segPct, 100 - acumPct);
         acumPct += visiblePct;
-        return `<div class="total-budget-seg" style="width:${visiblePct}%;background:${s.color}" title="${s.name}: ${fmt(s.total)} (${Math.round(segPct)}%)"></div>`;
+        return `<div class="total-budget-seg" style="width:${visiblePct}%;background:${s.color}" title="${s.name}: ${fmt(s.spent)} (presupuesto ${fmt(s.budget)})"></div>`;
       }).join('');
       const overFlow = overPct > 100
-        ? `<div class="total-budget-overflow">+${overPct - 100}% sobre presupuesto</div>`
+        ? `<div class="total-budget-overflow">+${overPct - 100}% sobre el presupuesto total</div>`
         : '';
       totalBudgetHTML = `
         <div class="total-budget-card ${overPct > 100 ? 'over' : overPct >= 90 ? 'warn' : ''}">
           <div class="total-budget-header">
             <span class="total-budget-label">💎 PRESUPUESTO TOTAL</span>
-            <button class="budget-edit-btn" onclick="editBudget('_total')">✏️</button>
+            <span style="font-size:11px;color:var(--muted)">suma de categorías</span>
           </div>
           <div class="total-budget-amounts">
             <b>${fmt(gastoNeto)}</b> / <b>${fmt(totalBudget)}</b>
@@ -876,14 +882,7 @@ async function loadPlan() {
           </div>
           <div class="total-budget-bar">${segmentsHTML}</div>
           ${overFlow}
-          <div class="total-budget-legend">Cada color = una categoría apilando su % del presupuesto. Toca un segmento para ver detalle.</div>
-        </div>`;
-    } else {
-      totalBudgetHTML = `
-        <div class="total-budget-card empty">
-          <button class="plan-add-btn" style="width:100%;font-size:7px;padding:14px;color:var(--gold);border-color:var(--gold);background:rgba(255,185,56,.08);box-shadow:0 0 14px rgba(255,185,56,.2)" onclick="editBudget('_total')">
-            💎 DEFINIR PRESUPUESTO TOTAL MENSUAL
-          </button>
+          <div class="total-budget-legend">Cada color = gasto real de una categoría. La barra se llena hasta el tope total (suma de tus presupuestos).</div>
         </div>`;
     }
 
@@ -1023,19 +1022,14 @@ async function loadPlan() {
 // ── Acciones PLAN ─────────────────────────────────────────────────────────────
 
 window.editBudget = (catId) => {
-  const key = catId === '_total' ? '_total' : catId;
-  const label = catId === '_total'
-    ? 'Presupuesto total mensual'
-    : (state.categorias.find(c => c.id === catId)?.nombre
-        ? `Presupuesto mensual de "${state.categorias.find(c => c.id === catId).nombre}"`
-        : null);
-  if (!label) return;
-  const current = catBudgets[key] || '';
-  const val = prompt(`${label} en pesos\n(escribe 0 o vacío para borrarlo)`, current);
+  const cat = state.categorias.find(c => c.id === catId);
+  if (!cat) return;
+  const current = catBudgets[catId] || '';
+  const val = prompt(`Presupuesto mensual de "${cat.nombre}" en pesos\n(escribe 0 o vacío para borrarlo)`, current);
   if (val === null) return;
   const n = parseInt(String(val).replace(/\D/g,'')) || 0;
-  if (n <= 0) delete catBudgets[key];
-  else catBudgets[key] = n;
+  if (n <= 0) delete catBudgets[catId];
+  else catBudgets[catId] = n;
   localStorage.setItem(BUDGETS_KEY, JSON.stringify(catBudgets));
   loadPlan();
 };
