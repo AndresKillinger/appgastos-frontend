@@ -763,6 +763,7 @@ function renderSyncResult(d) {
   const ccCount = ok.filter(p => p.tipo === 'cc').length;
   const tcCount = ok.filter(p => p.tipo === 'tc').length;
   const mergedCount = d.apple_pay_merged || 0;
+  const dedupCount  = d.auto_dedupe_removed || 0;
 
   if (procs.length === 0) {
     return `<div class="sync-empty">
@@ -770,6 +771,7 @@ function renderSyncResult(d) {
       <div>Sin cartolas nuevas</div>
       <div style="font-size:13px;margin-top:6px">Todo al día — Gmail no tiene correos pendientes.</div>
       ${mergedCount > 0 ? `<div style="font-size:13px;margin-top:8px;color:var(--green)">🔗 ${mergedCount} apple-pay fusionado${mergedCount === 1 ? '' : 's'} con TC</div>` : ''}
+      ${dedupCount > 0 ? `<div style="font-size:13px;margin-top:4px;color:var(--green)">🧹 ${dedupCount} duplicado${dedupCount === 1 ? '' : 's'} eliminado${dedupCount === 1 ? '' : 's'}</div>` : ''}
     </div>`;
   }
 
@@ -778,6 +780,7 @@ function renderSyncResult(d) {
     <div class="sync-pill"><span class="sync-pill-num">${ccCount}</span><span class="sync-pill-label">🏦 CC</span></div>
     <div class="sync-pill"><span class="sync-pill-num">${tcCount}</span><span class="sync-pill-label">💳 TC</span></div>
     ${mergedCount > 0 ? `<div class="sync-pill"><span class="sync-pill-num">${mergedCount}</span><span class="sync-pill-label">🔗 fusionados</span></div>` : ''}
+    ${dedupCount > 0 ? `<div class="sync-pill"><span class="sync-pill-num">${dedupCount}</span><span class="sync-pill-label">🧹 dedupe</span></div>` : ''}
   </div>`;
 
   const rows = procs.map(p => {
