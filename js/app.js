@@ -673,14 +673,43 @@ window.irAMes = mes => { state.mes = mes; navigate('movimientos'); };
 
 const DOW_NAMES = ['DOM','LUN','MAR','MIE','JUE','VIE','SAB'];
 
-function calcProjection(gastoActual, anio, mes) {
+function calcProjection(gastoActual, anio, mes, avgPrev = 0) {
   const today = new Date();
   const isCurrentMonth = anio === today.getFullYear() && mes === (today.getMonth()+1);
   const lastDay = new Date(anio, mes, 0).getDate();
-  if (!isCurrentMonth) return { proyectado: gastoActual, dayOfMonth: lastDay, lastDay, finished: true };
+  if (!isCurrentMonth) {
+    return { proyectado: gastoActual, dayOfMonth: lastDay, lastDay, finished: true, linear: gastoActual, smart: false };
+  }
   const dayOfMonth = today.getDate();
-  const proyectado = Math.round(gastoActual / Math.max(1, dayOfMonth) * lastDay);
-  return { proyectado, dayOfMonth, lastDay, finished: false };
+  const progress = dayOfMonth / lastDay;
+  // Extrapolación lineal pura (el método "ingenuo")
+  const linear = Math.round(gastoActual / Math.max(1, dayOfMonth) * lastDay);
+
+  if (avgPrev <= 0) {
+    // Sin historial → solo podemos usar la extrapolación lineal
+    return { proyectado: linear, linear, dayOfMonth, lastDay, finished: false, smart: false };
+  }
+
+  // Blend ponderado: más peso al ritmo actual a medida que avanza el mes.
+  // progress^1.5 es cauto al principio (día 1: ~0.6% peso lineal, día 30: 100%).
+  const weightLinear = Math.pow(progress, 1.5);
+  let blended = Math.round(weightLinear * linear + (1 - weightLinear) * avgPrev);
+
+  // Tope: nunca proyectar más de 2× el promedio histórico (cap contra spikes absurdos)
+  blended = Math.min(blended, Math.round(avgPrev * 2));
+  // Piso: nunca menos de lo que ya gastaste
+  blended = Math.max(blended, gastoActual);
+
+  return {
+    proyectado: blended,
+    linear,
+    dayOfMonth,
+    lastDay,
+    finished: false,
+    smart: true,
+    avgPrev,
+    weightLinearPct: Math.round(weightLinear * 100),
+  };
 }
 
 function topMerchants(movs, n = 10) {
@@ -737,9 +766,11 @@ async function loadPlan() {
     const periodTitle = `${MESES[state.mes]} ${state.anio}`;
 
     // ── 2. Proyección
-    const { proyectado, dayOfMonth, finished } = calcProjection(gastoNeto, state.anio, state.mes);
     const promPrev3 = prevSummaries.filter(s => s).map(s => parseInt(s.gasto_neto ?? s.total_cargos) || 0);
     const promAvg = promPrev3.length ? Math.round(promPrev3.reduce((a,b)=>a+b,0) / promPrev3.length) : 0;
+    const proj = calcProjection(gastoNeto, state.anio, state.mes, promAvg);
+    const { proyectado, dayOfMonth, finished, linear, smart, weightLinearPct } = proj;
+
     let projDiff = null, projDiffPct = null;
     if (promAvg > 0) {
       projDiff = proyectado - promAvg;
@@ -749,6 +780,14 @@ async function loadPlan() {
       ? (projDiffPct > 20 ? 'proj-danger' : projDiffPct > 0 ? 'proj-warn' : '')
       : '';
     const projPct = promAvg > 0 ? Math.min(150, Math.round(proyectado / promAvg * 100)) : 0;
+
+    // Si la lineal pura difiere mucho del blended (>30%), mostramos un aviso
+    const linearDifference = smart && linear > proyectado * 1.3
+      ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">
+          (Ritmo lineal puro proyectaría ${fmt(linear)}, pero ajustamos con tu historial — confianza actual ${weightLinearPct}%)
+         </div>`
+      : '';
+
     const projHTML = `
       <div class="proj-card ${projLevel}">
         <div class="proj-label">${finished ? '💥 GASTO TOTAL DEL MES' : '🔮 PROYECCIÓN FIN DE MES'}</div>
@@ -761,6 +800,7 @@ async function loadPlan() {
               : ''}`
             : ' (no hay datos previos para comparar)'}
         </div>
+        ${linearDifference}
         ${promAvg > 0 ? `<div class="proj-progress"><div class="proj-progress-fill" style="width:${projPct}%"></div></div>` : ''}
         ${promAvg > 0 ? `<div style="font-size:12px;color:var(--muted)">100% = promedio histórico</div>` : ''}
       </div>`;
@@ -769,10 +809,59 @@ async function loadPlan() {
     const budgetCats = state.categorias.filter(c => c.es_gasto && catBudgets[c.id] > 0);
     const budgetByCat = {}; d.by_category.forEach(c => { budgetByCat[c.categoria_id] = parseInt(c.total) || 0; });
 
+    // 3a. Presupuesto TOTAL (independiente de los por-categoría)
+    const totalBudget = catBudgets['_total'] || 0;
+    let totalBudgetHTML = '';
+    if (totalBudget > 0) {
+      const segmentsRaw = d.by_category
+        .filter(c => parseInt(c.total) > 0)
+        .map(c => ({
+          cid: c.categoria_id ?? 0,
+          name: c.nombre,
+          color: pickColor(c.categoria_id ?? 0, c.color),
+          total: parseInt(c.total),
+        }))
+        .sort((a,b) => b.total - a.total);
+      const overPct = Math.round(gastoNeto / totalBudget * 100);
+      // Cada segmento ocupa su % del presupuesto. Si excede 100% se trunca visualmente al 100%.
+      let acumPct = 0;
+      const segmentsHTML = segmentsRaw.map(s => {
+        const segPct = s.total / totalBudget * 100;
+        if (acumPct >= 100) return '';
+        const visiblePct = Math.min(segPct, 100 - acumPct);
+        acumPct += visiblePct;
+        return `<div class="total-budget-seg" style="width:${visiblePct}%;background:${s.color}" title="${s.name}: ${fmt(s.total)} (${Math.round(segPct)}%)"></div>`;
+      }).join('');
+      const overFlow = overPct > 100
+        ? `<div class="total-budget-overflow">+${overPct - 100}% sobre presupuesto</div>`
+        : '';
+      totalBudgetHTML = `
+        <div class="total-budget-card ${overPct > 100 ? 'over' : overPct >= 90 ? 'warn' : ''}">
+          <div class="total-budget-header">
+            <span class="total-budget-label">💎 PRESUPUESTO TOTAL</span>
+            <button class="budget-edit-btn" onclick="editBudget('_total')">✏️</button>
+          </div>
+          <div class="total-budget-amounts">
+            <b>${fmt(gastoNeto)}</b> / <b>${fmt(totalBudget)}</b>
+            <span class="total-budget-pct ${overPct > 100 ? 'over' : ''}">${overPct}%</span>
+          </div>
+          <div class="total-budget-bar">${segmentsHTML}</div>
+          ${overFlow}
+          <div class="total-budget-legend">Cada color = una categoría apilando su % del presupuesto. Toca un segmento para ver detalle.</div>
+        </div>`;
+    } else {
+      totalBudgetHTML = `
+        <div class="total-budget-card empty">
+          <button class="plan-add-btn" style="width:100%;font-size:7px;padding:14px;color:var(--gold);border-color:var(--gold);background:rgba(255,185,56,.08);box-shadow:0 0 14px rgba(255,185,56,.2)" onclick="editBudget('_total')">
+            💎 DEFINIR PRESUPUESTO TOTAL MENSUAL
+          </button>
+        </div>`;
+    }
+
     let budgetHTML = '';
     if (budgetCats.length === 0) {
       budgetHTML = `<div class="empty" style="padding:16px;text-align:center">
-        Sin presupuestos definidos.<br>Toca <b>"Editar"</b> en cualquier categoría para asignarle un tope mensual.
+        Sin presupuestos por categoría.<br>Toca <b>"Editar"</b> en cualquier categoría para asignarle un tope mensual.
       </div>`;
     } else {
       budgetHTML = budgetCats.map(c => {
@@ -877,7 +966,8 @@ async function loadPlan() {
       ${projHTML}
 
       <div class="section-title">💰 PRESUPUESTOS</div>
-      <div class="section-sub">Tope mensual por categoría. Verde &lt;70%, amarillo 70-99%, rojo cuando te pasas.</div>
+      <div class="section-sub">Tope mensual total + por categoría. La barra del total se rellena con cada categoría según cuánto consume.</div>
+      ${totalBudgetHTML}
       <div class="budget-list">${budgetHTML}</div>
       ${addBudgetBtn}
 
@@ -903,14 +993,19 @@ async function loadPlan() {
 // ── Acciones PLAN ─────────────────────────────────────────────────────────────
 
 window.editBudget = (catId) => {
-  const cat = state.categorias.find(c => c.id === catId);
-  if (!cat) return;
-  const current = catBudgets[catId] || '';
-  const val = prompt(`Presupuesto mensual de "${cat.nombre}" en pesos\n(escribe 0 o vacío para borrarlo)`, current);
+  const key = catId === '_total' ? '_total' : catId;
+  const label = catId === '_total'
+    ? 'Presupuesto total mensual'
+    : (state.categorias.find(c => c.id === catId)?.nombre
+        ? `Presupuesto mensual de "${state.categorias.find(c => c.id === catId).nombre}"`
+        : null);
+  if (!label) return;
+  const current = catBudgets[key] || '';
+  const val = prompt(`${label} en pesos\n(escribe 0 o vacío para borrarlo)`, current);
   if (val === null) return;
-  const n = parseInt(val.replace(/\D/g,'')) || 0;
-  if (n <= 0) delete catBudgets[catId];
-  else catBudgets[catId] = n;
+  const n = parseInt(String(val).replace(/\D/g,'')) || 0;
+  if (n <= 0) delete catBudgets[key];
+  else catBudgets[key] = n;
   localStorage.setItem(BUDGETS_KEY, JSON.stringify(catBudgets));
   loadPlan();
 };

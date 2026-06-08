@@ -580,6 +580,51 @@
     .proj-danger .proj-value { color: var(--red); text-shadow: var(--neon-red); }
     .proj-danger .proj-progress-fill { background: var(--red); }
 
+    /* PLAN: Presupuesto TOTAL (stacked) */
+    .total-budget-card {
+      background: linear-gradient(180deg, rgba(40,40,90,.55), rgba(20,20,55,.55));
+      backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-hi); border-radius: 14px;
+      padding: 14px 14px 12px; margin-bottom: 14px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .total-budget-card.warn { border-color: var(--gold); box-shadow: 0 6px 20px rgba(0,0,0,.4), 0 0 16px rgba(255,185,56,.22); }
+    .total-budget-card.over { border-color: var(--red);  box-shadow: 0 6px 20px rgba(0,0,0,.4), 0 0 18px rgba(255,77,106,.28); }
+    .total-budget-card.empty { padding: 4px; background: transparent; border: none; box-shadow: none; }
+    .total-budget-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .total-budget-label {
+      font-family: var(--fp); font-size: 8px; color: var(--gold);
+      letter-spacing: 1px; text-shadow: var(--neon-gold);
+    }
+    .total-budget-amounts {
+      font-family: var(--fp); font-size: 9px; color: var(--text);
+      margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px;
+    }
+    .total-budget-amounts b { color: var(--gold); }
+    .total-budget-pct { font-size: 8px; color: var(--muted); margin-left: auto; }
+    .total-budget-pct.over { color: var(--red); text-shadow: var(--neon-red); }
+    .total-budget-bar {
+      display: flex; height: 16px; width: 100%; overflow: hidden;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.04);
+    }
+    .total-budget-seg {
+      height: 100%; transition: width .35s;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .total-budget-seg + .total-budget-seg { border-left: 1px solid rgba(0,0,0,.25); }
+    .total-budget-overflow {
+      margin-top: 6px; font-size: 12px; color: var(--red);
+      text-align: right; font-weight: bold;
+    }
+    .total-budget-legend {
+      margin-top: 8px; font-size: 11px; color: var(--muted);
+      line-height: 1.4;
+    }
+
     /* PLAN: Presupuestos por categoría */
     .budget-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
     .budget-row {
