@@ -352,18 +352,50 @@ async function loadResumen() {
     // Asegurar que el año actualmente seleccionado esté en lineYears (mejor UX al cambiar de año)
     if (!state.lineYears.includes(state.anio)) state.lineYears.push(state.anio);
     state.lineYears.sort();
-    const [d, yearly, stackData, ...lineYearsData] = await Promise.all([
+    // Mes anterior (para variación %)
+    const prevMes  = state.mes === 1 ? 12 : state.mes - 1;
+    const prevAnio = state.mes === 1 ? state.anio - 1 : state.anio;
+
+    const [d, prevD, yearly, stackData, ...lineYearsData] = await Promise.all([
       getSummary(state.anio, state.mes),
+      getSummary(prevAnio, prevMes).catch(() => null),
       getYearlySummary(state.anio),
       getYearlyCategoryBreakdown(state.anio).catch(() => null),
       ...state.lineYears.map(y => getYearlyCategoryBreakdown(y).catch(() => null)),
     ]);
     state.lineYearsDataCache = lineYearsData;
 
+    // Mapa de cat_id -> total del mes anterior (para diff)
+    const prevByCat = {};
+    if (prevD?.by_category) {
+      for (const c of prevD.by_category) {
+        prevByCat[c.categoria_id ?? 0] = parseInt(c.total) || 0;
+      }
+    }
+    const prevTotalNeto = prevD ? (parseInt(prevD.gasto_neto ?? prevD.total_cargos) || 0) : 0;
+
     const totalGasto  = parseInt(d.total_cargos);
     const totalAbonos = parseInt(d.total_abonos || 0);
     const gastoNeto   = parseInt(d.gasto_neto ?? d.total_cargos);
     const excluido    = parseInt(d.total_excluido || 0);
+
+    // Helper de delta vs mes anterior
+    // Devuelve { text, klass } o null si no hay comparación útil
+    const buildDelta = (currVal, prevVal) => {
+      const curr = parseInt(currVal) || 0;
+      const prev = parseInt(prevVal) || 0;
+      if (prev === 0 && curr === 0) return null;
+      if (prev === 0) return { text: 'NUEVO', klass: 'delta-new', diff: curr, pct: null };
+      if (curr === 0) return { text: '— sin gasto', klass: 'delta-down', diff: -prev, pct: -100 };
+      const diff = curr - prev;
+      const pct = Math.round((diff / prev) * 100);
+      const sign = pct > 0 ? '+' : '';
+      return {
+        text: `${pct > 0 ? '↑' : pct < 0 ? '↓' : '='} ${sign}${pct}%`,
+        klass: pct > 5 ? 'delta-up' : pct < -5 ? 'delta-down' : 'delta-flat',
+        diff, pct,
+      };
+    };
 
     // Barras de categorías
     const maxCat = Math.max(1, ...d.by_category.map(c => parseInt(c.total)));
@@ -371,6 +403,10 @@ async function loadResumen() {
       const pct = Math.round((parseInt(c.total) / maxCat) * 100);
       const cid = c.categoria_id ?? 0;
       const color = pickColor(cid, c.color);
+      const delta = buildDelta(c.total, prevByCat[cid]);
+      const deltaBadge = delta
+        ? `<span class="delta-badge ${delta.klass}" title="${prevByCat[cid] !== undefined ? 'Mes anterior: ' + fmt(prevByCat[cid]) : 'No había gasto el mes anterior'}">${delta.text}</span>`
+        : '';
       return `
         <div class="cat-row" onclick="toggleCatDetail(${cid},${state.mes},${state.anio})">
           <div class="cat-row-icon">${mobImg(c.mob_id, c.icono, 26)}</div>
@@ -382,11 +418,50 @@ async function loadResumen() {
             <div class="cat-bar-bg">
               <div class="cat-bar-fill" style="width:${pct}%;background:${color}"></div>
             </div>
-            <span class="cat-row-count">${c.count} mov. ▼</span>
+            <div class="cat-row-footer">
+              <span class="cat-row-count">${c.count} mov. ▼</span>
+              ${deltaBadge}
+            </div>
           </div>
         </div>
         <div id="cat-detail-${cid}" class="cat-detail hidden"></div>`;
     }).join('') || `<div class="empty" style="padding:16px">Sin gastos este mes</div>`;
+
+    // Top categorías que más subieron vs mes anterior (alertas)
+    const topMovers = d.by_category
+      .map(c => {
+        const cid = c.categoria_id ?? 0;
+        const prev = prevByCat[cid] || 0;
+        const curr = parseInt(c.total) || 0;
+        const delta = buildDelta(curr, prev);
+        return { ...c, cid, prev, curr, delta };
+      })
+      .filter(c => c.delta && c.delta.diff > 0 && (c.delta.pct === null || c.delta.pct >= 20) && c.delta.diff >= 5000)
+      .sort((a, b) => b.delta.diff - a.delta.diff)
+      .slice(0, 5);
+
+    const topMoversHTML = (prevD && topMovers.length > 0) ? `
+      <div class="section-title" style="margin-top:20px">🚨 SUBIERON vs ${MESES[prevMes]}</div>
+      <div class="section-sub">Categorías que crecieron — apúntale a estas si quieres bajar el gasto.</div>
+      <div class="movers-list">
+        ${topMovers.map(c => {
+          const color = pickColor(c.cid, c.color);
+          const isNew = c.delta.pct === null;
+          const pctText = isNew ? 'NUEVO' : `+${c.delta.pct}%`;
+          return `
+            <div class="mover-row" onclick="toggleCatDetail(${c.cid},${state.mes},${state.anio})">
+              <div class="mover-icon">${mobImg(c.mob_id, c.icono, 24)}</div>
+              <div class="mover-body">
+                <div class="mover-name" style="color:${color}">${c.nombre}</div>
+                <div class="mover-detail">${isNew ? 'No había gasto' : fmt(c.prev)} → <b>${fmt(c.curr)}</b></div>
+              </div>
+              <div class="mover-delta">
+                <div class="mover-pct">${pctText}</div>
+                <div class="mover-diff">+${fmt(c.delta.diff)}</div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>` : '';
 
     // Barras mes a mes — totales + estadísticas año
     const mesNums = yearly.meses.map(m => parseInt(m.total));
@@ -474,14 +549,24 @@ async function loadResumen() {
       <div class="total-card">
         <div class="total-label">💥 GASTO DEL MES</div>
         <div class="total-value">${fmt(gastoNeto)}</div>
+        ${(() => {
+          const td = buildDelta(gastoNeto, prevTotalNeto);
+          if (!td || !prevD) return '';
+          const sign = (td.diff || 0) > 0 ? '+' : '';
+          return `<div class="total-delta ${td.klass}">
+            ${td.text} <span class="total-delta-abs">(${sign}${fmt(td.diff)} vs ${MESES[prevMes]})</span>
+          </div>`;
+        })()}
         ${totalAbonos > 0 ? `<div class="total-excluido" style="color:var(--green)">-${fmt(totalAbonos)} reembolsado</div>` : ''}
         ${excluido > 0 ? `<div class="total-excluido">+${fmt(excluido)} excluido</div>` : ''}
         <div class="total-sub">${d.cantidad_movimientos} cargos${totalAbonos > 0 ? ` · bruto ${fmt(totalGasto)}` : ''}</div>
       </div>
 
       <div class="section-title">📊 GASTO POR CATEGORÍA</div>
-      <div class="section-sub">Toca una categoría para ver sus movimientos del mes.</div>
+      <div class="section-sub">Toca una categoría para ver sus movimientos del mes. La pill al lado muestra la variación vs ${MESES[prevMes]}.</div>
       <div class="cat-list">${catRows}</div>
+
+      ${topMoversHTML}
 
       <div class="section-title" style="margin-top:22px">📅 ${state.anio} MES A MES</div>
       <div class="section-sub">
