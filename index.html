@@ -530,6 +530,179 @@
       background: rgba(120,120,255,.04);
     }
     .line-empty-icon { font-size: 38px; margin-bottom: 10px; filter: drop-shadow(0 0 12px rgba(120,120,255,.3)); }
+
+    /* ── PLAN: action header con botón agregar gasto ── */
+    .plan-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; gap: 10px;
+    }
+    .plan-title {
+      font-family: var(--fp); font-size: 11px; color: var(--gold);
+      text-shadow: var(--neon-gold); letter-spacing: 1px;
+    }
+    .plan-add-btn {
+      background: linear-gradient(180deg, rgba(216,100,255,.25), rgba(120,40,180,.25));
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--accent); border-radius: 10px;
+      color: var(--accent); font-family: var(--fp); font-size: 8px;
+      padding: 10px 14px; cursor: pointer;
+      box-shadow: 0 0 14px rgba(216,100,255,.3), inset 0 1px 0 rgba(255,255,255,.1);
+      letter-spacing: .5px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .plan-add-btn:active { transform: scale(.96); }
+
+    /* PLAN: Proyección */
+    .proj-card {
+      background: linear-gradient(180deg, rgba(40,40,90,.55), rgba(20,20,55,.55));
+      backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-hi); border-radius: 16px;
+      padding: 18px 16px; margin-bottom: 18px;
+      box-shadow: 0 10px 36px rgba(0,0,0,.5), 0 0 24px rgba(120,120,255,.15);
+    }
+    .proj-label { font-family: var(--fp); font-size: 8px; color: var(--muted); margin-bottom: 10px; letter-spacing: 1px; }
+    .proj-value { font-family: var(--fp); font-size: 20px; color: var(--gold); text-shadow: var(--neon-gold); margin-bottom: 6px; }
+    .proj-sub { font-size: 14px; color: var(--muted); line-height: 1.5; }
+    .proj-sub b { color: var(--text); }
+    .proj-progress {
+      height: 10px; background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08); border-radius: 5px;
+      margin: 12px 0 8px; overflow: hidden;
+    }
+    .proj-progress-fill {
+      height: 100%; border-radius: 4px; transition: width .35s;
+      background: linear-gradient(90deg, var(--green), var(--gold));
+      box-shadow: 0 0 8px currentColor;
+    }
+    .proj-warn .proj-progress-fill {
+      background: linear-gradient(90deg, var(--gold), var(--red));
+    }
+    .proj-danger .proj-value { color: var(--red); text-shadow: var(--neon-red); }
+    .proj-danger .proj-progress-fill { background: var(--red); }
+
+    /* PLAN: Presupuestos por categoría */
+    .budget-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+    .budget-row {
+      background: var(--surface);
+      backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.3);
+    }
+    .budget-row-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .budget-row-icon { width: 26px; flex-shrink: 0; }
+    .budget-row-name { flex: 1; min-width: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .budget-row-amounts {
+      font-family: var(--fp); font-size: 7px; color: var(--text); flex-shrink: 0;
+    }
+    .budget-row-amounts b { color: var(--gold); }
+    .budget-bar { height: 8px; background: rgba(255,255,255,.05); border-radius: 4px; overflow: hidden; border: 1px solid rgba(255,255,255,.06); }
+    .budget-bar-fill { height: 100%; border-radius: 3px; transition: width .35s; box-shadow: 0 0 6px currentColor; }
+    .budget-bar-fill.ok    { background: var(--green); color: var(--green); }
+    .budget-bar-fill.warn  { background: var(--gold);  color: var(--gold); }
+    .budget-bar-fill.over  { background: var(--red);   color: var(--red); }
+    .budget-row-pct {
+      font-size: 12px; color: var(--muted); text-align: right; margin-top: 4px;
+    }
+    .budget-row-pct.over { color: var(--red); }
+    .budget-edit-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--muted); font-family: var(--fp); font-size: 6px;
+      padding: 4px 8px; cursor: pointer; flex-shrink: 0;
+    }
+    .budget-edit-btn:active { color: var(--gold); }
+
+    /* PLAN: Top comercios */
+    .top-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 18px; }
+    .top-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 10px;
+      background: rgba(120,120,255,.04);
+      border: 1px solid rgba(120,120,255,.1);
+    }
+    .top-row-rank {
+      font-family: var(--fp); font-size: 8px; color: var(--gold);
+      width: 22px; text-shadow: var(--neon-gold);
+    }
+    .top-row-name { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top-row-total { font-family: var(--fp); font-size: 7px; color: var(--text); flex-shrink: 0; }
+    .top-row-count { font-size: 12px; color: var(--muted); margin-left: 6px; }
+
+    /* PLAN: Heatmap día de la semana */
+    .heatmap-row { display: flex; gap: 4px; margin-bottom: 18px; }
+    .heatmap-cell {
+      flex: 1; text-align: center;
+      padding: 12px 4px; border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .heatmap-day { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+    .heatmap-amt { font-family: var(--fp); font-size: 6px; color: var(--text); }
+    .heatmap-cell.peak { border-color: var(--red); box-shadow: 0 0 8px rgba(255,77,106,.3); }
+    .heatmap-cell.peak .heatmap-day { color: var(--red); }
+    .heatmap-cell.peak .heatmap-amt { color: var(--red); text-shadow: var(--neon-red); }
+
+    /* PLAN: Necesario vs Deseable */
+    .nd-summary {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
+    }
+    .nd-card {
+      padding: 14px 12px; border-radius: 12px;
+      border: 1px solid; text-align: center;
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    .nd-card.nec { background: rgba(45,255,122,.06); border-color: rgba(45,255,122,.4); }
+    .nd-card.des { background: rgba(255,77,106,.06); border-color: rgba(255,77,106,.4); }
+    .nd-card.unc { background: rgba(120,120,255,.04); border-color: rgba(120,120,255,.2); grid-column: span 2; }
+    .nd-label { font-family: var(--fp); font-size: 7px; margin-bottom: 6px; letter-spacing: .5px; }
+    .nd-card.nec .nd-label { color: var(--green); }
+    .nd-card.des .nd-label { color: var(--red); }
+    .nd-card.unc .nd-label { color: var(--muted); }
+    .nd-amt { font-family: var(--fp); font-size: 12px; color: var(--text); }
+    .nd-card.nec .nd-amt { color: var(--green); text-shadow: var(--neon-green); }
+    .nd-card.des .nd-amt { color: var(--red); text-shadow: var(--neon-red); }
+    .nd-pct { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .nd-cat-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+    .nd-cat-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; border-radius: 8px;
+      background: rgba(255,255,255,.02);
+      border: 1px solid rgba(120,120,255,.08);
+    }
+    .nd-cat-icon { width: 24px; flex-shrink: 0; }
+    .nd-cat-name { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nd-cat-tipo-pills { display: flex; gap: 3px; flex-shrink: 0; }
+    .nd-pill {
+      padding: 4px 6px; border-radius: 5px;
+      font-family: var(--fp); font-size: 5px;
+      background: transparent; border: 1px solid rgba(255,255,255,.12);
+      color: var(--muted); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .nd-pill.active.nec { background: rgba(45,255,122,.15); border-color: var(--green); color: var(--green); }
+    .nd-pill.active.des { background: rgba(255,77,106,.15); border-color: var(--red); color: var(--red); }
+    .nd-pill:active { transform: scale(.92); }
+
+    /* Manual modal */
+    .manual-sub {
+      font-size: 13px; color: var(--muted); line-height: 1.5;
+      padding: 10px 12px; margin-bottom: 14px;
+      background: rgba(120,120,255,.06);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .manual-tipo-row { display: flex; gap: 6px; }
+    .manual-tipo-btn {
+      flex: 1; background: var(--surface);
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--muted); font-family: var(--fb); font-size: 14px;
+      padding: 10px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .manual-tipo-btn.active { background: rgba(255,185,56,.1); border-color: var(--gold); color: var(--gold); }
+    .manual-tipo-btn:active { transform: scale(.96); }
     .line-legend {
       display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 8px;
       margin-top: 12px; padding-top: 10px;
@@ -889,6 +1062,12 @@
       <div id="resumen-content"><div class="loading">🐌 Cargando...</div></div>
     </div>
 
+    <div id="screen-plan" class="screen hidden">
+      <img class="bg-mob bg-mob-octo"  src="https://maplestory.io/api/GMS/latest/mob/8820001/render/stand" onerror="this.style.display='none'" alt="">
+      <img class="bg-mob bg-mob-snail" src="https://maplestory.io/api/GMS/latest/mob/100100/render/stand" onerror="this.style.display='none'" alt="">
+      <div id="plan-content"><div class="loading">🐌 Cargando...</div></div>
+    </div>
+
     <div id="screen-movimientos" class="screen hidden">
       <img class="bg-mob bg-mob-slime"  src="https://maplestory.io/api/GMS/latest/mob/210100/render/stand" onerror="this.style.display='none'" alt="">
       <img class="bg-mob bg-mob-octo"   src="https://maplestory.io/api/GMS/latest/mob/8820001/render/stand" onerror="this.style.display='none'" alt="">
@@ -917,6 +1096,7 @@
 
   <nav class="tab-bar">
     <button class="tab-btn active" data-tab="resumen"><span class="icon">📊</span><span>STATS</span></button>
+    <button class="tab-btn" data-tab="plan"><span class="icon">⚔️</span><span>PLAN</span></button>
     <button class="tab-btn" data-tab="movimientos"><span class="icon">👾</span><span>MOV</span></button>
   </nav>
 
@@ -924,6 +1104,41 @@
 
 <!-- Modal: categorizar -->
 <!-- Modal: resultado de sync -->
+<!-- Modal: agregar gasto manual -->
+<div id="modal-manual" class="modal-overlay hidden">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">➕ AGREGAR GASTO</span>
+      <button class="btn-cerrar-modal" onclick="cerrarModalManual()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="manual-sub">
+        Provisorio: cuando llegue la cartola del banco, se fusiona automáticamente con el cargo real (mismo monto + fecha cercana).
+      </div>
+      <div class="field">
+        <label>Descripción / comercio</label>
+        <input id="manual-desc" class="nc-input" type="text" placeholder="ej: Transferencia Juanito">
+      </div>
+      <div class="field">
+        <label>Monto en pesos</label>
+        <input id="manual-monto" class="nc-input" type="number" inputmode="numeric" placeholder="50000">
+      </div>
+      <div class="field">
+        <label>Fecha</label>
+        <input id="manual-fecha" class="nc-input" type="date">
+      </div>
+      <div class="field">
+        <label>Tipo</label>
+        <div class="manual-tipo-row">
+          <button class="manual-tipo-btn active" data-tipo="cargo" onclick="setManualTipo('cargo')">💥 Cargo (gasto)</button>
+          <button class="manual-tipo-btn" data-tipo="abono" onclick="setManualTipo('abono')">💰 Abono (ingreso)</button>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="guardarManual()">⚔️ GUARDAR</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-sync" class="modal-overlay hidden">
   <div class="modal-box">
     <div class="modal-header">

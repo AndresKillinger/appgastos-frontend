@@ -29,6 +29,17 @@ export async function addApplePay({ descripcion, monto, fecha }) {
   return r.json();
 }
 
+export async function addManual({ descripcion, monto, fecha, tipo = 'cargo' }) {
+  const body = { descripcion, monto: Math.abs(monto), tipo, cuenta: 'manual' };
+  if (fecha) body.fecha = fecha;
+  const r = await fetch(`${BASE}/movements/manual`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
 export async function getCategories() {
   const r = await fetch(`${BASE}/categories`);
   return r.json();

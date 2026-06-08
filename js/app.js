@@ -1,4 +1,4 @@
-import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory } from './api.js';
+import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory, addManual } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -111,6 +111,16 @@ const _isDefaultColor = c => !c || /^#?(8{3}|8{6})$/i.test(String(c).replace('#'
 const CUSTOM_COLORS_KEY = 'maple-cat-colors';
 let customCatColors = {};
 try { customCatColors = JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY) || '{}'); } catch {}
+
+// Presupuestos por categoría: { catId: monto_mensual_en_pesos }
+const BUDGETS_KEY = 'maple-budgets';
+let catBudgets = {};
+try { catBudgets = JSON.parse(localStorage.getItem(BUDGETS_KEY) || '{}'); } catch {}
+
+// Necesario vs deseable por categoría: { catId: 'nec' | 'des' }
+const NECDES_KEY = 'maple-necdes';
+let catNecDes = {};
+try { catNecDes = JSON.parse(localStorage.getItem(NECDES_KEY) || '{}'); } catch {}
 
 function pickColor(cid, color) {
   const key = String(cid ?? 'sin');
@@ -341,6 +351,7 @@ function navigate(tab) {
   document.querySelectorAll('.screen').forEach(s =>
     s.classList.toggle('hidden', s.id !== `screen-${tab}`));
   if (tab === 'resumen')     loadResumen();
+  if (tab === 'plan')        loadPlan();
   if (tab === 'movimientos') loadMovimientos();
 }
 
@@ -352,27 +363,49 @@ async function loadResumen() {
     // Asegurar que el año actualmente seleccionado esté en lineYears (mejor UX al cambiar de año)
     if (!state.lineYears.includes(state.anio)) state.lineYears.push(state.anio);
     state.lineYears.sort();
-    // Mes anterior (para variación %)
-    const prevMes  = state.mes === 1 ? 12 : state.mes - 1;
-    const prevAnio = state.mes === 1 ? state.anio - 1 : state.anio;
+    // Últimos 3 meses para promedio histórico (mejor que solo el mes anterior)
+    const monthsBack = [];
+    for (let i = 1; i <= 3; i++) {
+      let m = state.mes - i, a = state.anio;
+      while (m < 1) { m += 12; a -= 1; }
+      monthsBack.push({ a, m });
+    }
+    const prevMes  = monthsBack[0].m;
+    const prevAnio = monthsBack[0].a;
 
-    const [d, prevD, yearly, stackData, ...lineYearsData] = await Promise.all([
+    const [d, yearly, stackData, ...rest] = await Promise.all([
       getSummary(state.anio, state.mes),
-      getSummary(prevAnio, prevMes).catch(() => null),
       getYearlySummary(state.anio),
       getYearlyCategoryBreakdown(state.anio).catch(() => null),
+      ...monthsBack.map(({a,m}) => getSummary(a, m).catch(() => null)),
       ...state.lineYears.map(y => getYearlyCategoryBreakdown(y).catch(() => null)),
     ]);
+    const prevSummaries = rest.slice(0, monthsBack.length);
+    const lineYearsData = rest.slice(monthsBack.length);
     state.lineYearsDataCache = lineYearsData;
 
-    // Mapa de cat_id -> total del mes anterior (para diff)
+    // Promedio últimos 3 meses por categoría
     const prevByCat = {};
-    if (prevD?.by_category) {
-      for (const c of prevD.by_category) {
-        prevByCat[c.categoria_id ?? 0] = parseInt(c.total) || 0;
+    const validPrevs = prevSummaries.filter(s => s);
+    if (validPrevs.length > 0) {
+      const sumByCat = {};
+      for (const s of validPrevs) {
+        for (const c of (s.by_category || [])) {
+          const cid = c.categoria_id ?? 0;
+          sumByCat[cid] = (sumByCat[cid] || 0) + (parseInt(c.total) || 0);
+        }
+      }
+      for (const [cid, sum] of Object.entries(sumByCat)) {
+        prevByCat[cid] = Math.round(sum / validPrevs.length);
       }
     }
-    const prevTotalNeto = prevD ? (parseInt(prevD.gasto_neto ?? prevD.total_cargos) || 0) : 0;
+    const prevTotalNeto = validPrevs.length > 0
+      ? Math.round(validPrevs.reduce((acc, s) => acc + (parseInt(s.gasto_neto ?? s.total_cargos) || 0), 0) / validPrevs.length)
+      : 0;
+    const prevD = prevSummaries[0];  // se mantiene para el label "vs Mes X"
+    const promLabel = validPrevs.length === 1
+      ? `vs ${MESES[prevMes]}`
+      : `vs prom. últimos ${validPrevs.length} meses`;
 
     const totalGasto  = parseInt(d.total_cargos);
     const totalAbonos = parseInt(d.total_abonos || 0);
@@ -440,8 +473,8 @@ async function loadResumen() {
       .sort((a, b) => b.delta.diff - a.delta.diff)
       .slice(0, 5);
 
-    const topMoversHTML = (prevD && topMovers.length > 0) ? `
-      <div class="section-title" style="margin-top:20px">🚨 SUBIERON vs ${MESES[prevMes]}</div>
+    const topMoversHTML = (validPrevs.length > 0 && topMovers.length > 0) ? `
+      <div class="section-title" style="margin-top:20px">🚨 SUBIERON ${promLabel}</div>
       <div class="section-sub">Categorías que crecieron — apúntale a estas si quieres bajar el gasto.</div>
       <div class="movers-list">
         ${topMovers.map(c => {
@@ -551,10 +584,10 @@ async function loadResumen() {
         <div class="total-value">${fmt(gastoNeto)}</div>
         ${(() => {
           const td = buildDelta(gastoNeto, prevTotalNeto);
-          if (!td || !prevD) return '';
+          if (!td || validPrevs.length === 0) return '';
           const sign = (td.diff || 0) > 0 ? '+' : '';
           return `<div class="total-delta ${td.klass}">
-            ${td.text} <span class="total-delta-abs">(${sign}${fmt(td.diff)} vs ${MESES[prevMes]})</span>
+            ${td.text} <span class="total-delta-abs">(${sign}${fmt(td.diff)} ${promLabel})</span>
           </div>`;
         })()}
         ${totalAbonos > 0 ? `<div class="total-excluido" style="color:var(--green)">-${fmt(totalAbonos)} reembolsado</div>` : ''}
@@ -563,7 +596,7 @@ async function loadResumen() {
       </div>
 
       <div class="section-title">📊 GASTO POR CATEGORÍA</div>
-      <div class="section-sub">Toca una categoría para ver sus movimientos del mes. La pill al lado muestra la variación vs ${MESES[prevMes]}.</div>
+      <div class="section-sub">Toca una categoría para ver sus movimientos del mes. La pill al lado muestra la variación ${promLabel}.</div>
       <div class="cat-list">${catRows}</div>
 
       ${topMoversHTML}
@@ -635,6 +668,309 @@ window.toggleCatDetail = async (catId, mes, anio) => {
 };
 
 window.irAMes = mes => { state.mes = mes; navigate('movimientos'); };
+
+// ── Pantalla: Plan ────────────────────────────────────────────────────────────
+
+const DOW_NAMES = ['DOM','LUN','MAR','MIE','JUE','VIE','SAB'];
+
+function calcProjection(gastoActual, anio, mes) {
+  const today = new Date();
+  const isCurrentMonth = anio === today.getFullYear() && mes === (today.getMonth()+1);
+  const lastDay = new Date(anio, mes, 0).getDate();
+  if (!isCurrentMonth) return { proyectado: gastoActual, dayOfMonth: lastDay, lastDay, finished: true };
+  const dayOfMonth = today.getDate();
+  const proyectado = Math.round(gastoActual / Math.max(1, dayOfMonth) * lastDay);
+  return { proyectado, dayOfMonth, lastDay, finished: false };
+}
+
+function topMerchants(movs, n = 10) {
+  const grouped = {};
+  for (const m of movs) {
+    if (m.tipo !== 'cargo') continue;
+    const key = cleanDesc(m.descripcion).toLowerCase().replace(/\d+/g,'').trim().slice(0, 40);
+    if (!key) continue;
+    if (!grouped[key]) grouped[key] = { name: cleanDesc(m.descripcion), total: 0, count: 0 };
+    grouped[key].total += Math.abs(parseInt(m.monto));
+    grouped[key].count += 1;
+  }
+  return Object.values(grouped).sort((a,b) => b.total - a.total).slice(0, n);
+}
+
+function dayOfWeekTotals(movs) {
+  const tot = [0,0,0,0,0,0,0];
+  for (const m of movs) {
+    if (m.tipo !== 'cargo') continue;
+    // Parse "YYYY-MM-DD" como local para evitar shift de timezone
+    const [y, mo, d] = m.fecha.split('-').map(Number);
+    const dow = new Date(y, mo-1, d).getDay();
+    tot[dow] += Math.abs(parseInt(m.monto));
+  }
+  return tot;
+}
+
+async function loadPlan() {
+  const el = $('plan-content');
+  el.innerHTML = `<div class="loading">🐌 Cargando...</div>`;
+  try {
+    const desde = `${state.anio}-${String(state.mes).padStart(2,'0')}-01`;
+    const lastDay = new Date(state.anio, state.mes, 0).getDate();
+    const hasta = `${state.anio}-${String(state.mes).padStart(2,'0')}-${lastDay}`;
+
+    // 3 meses anteriores para promedio histórico
+    const monthsBack = [];
+    for (let i = 1; i <= 3; i++) {
+      let m = state.mes - i, a = state.anio;
+      while (m < 1) { m += 12; a -= 1; }
+      monthsBack.push({ a, m });
+    }
+
+    const [d, movsResp, ...prevSummaries] = await Promise.all([
+      getSummary(state.anio, state.mes),
+      getMovements({ desde, hasta, limite: 500 }),
+      ...monthsBack.map(({a,m}) => getSummary(a, m).catch(() => null)),
+    ]);
+
+    const movs = movsResp.data || [];
+    const gastoNeto = parseInt(d.gasto_neto ?? d.total_cargos) || 0;
+
+    // ── 1. Header con periodo + botón agregar
+    const periodTitle = `${MESES[state.mes]} ${state.anio}`;
+
+    // ── 2. Proyección
+    const { proyectado, dayOfMonth, finished } = calcProjection(gastoNeto, state.anio, state.mes);
+    const promPrev3 = prevSummaries.filter(s => s).map(s => parseInt(s.gasto_neto ?? s.total_cargos) || 0);
+    const promAvg = promPrev3.length ? Math.round(promPrev3.reduce((a,b)=>a+b,0) / promPrev3.length) : 0;
+    let projDiff = null, projDiffPct = null;
+    if (promAvg > 0) {
+      projDiff = proyectado - promAvg;
+      projDiffPct = Math.round((projDiff / promAvg) * 100);
+    }
+    const projLevel = promAvg > 0
+      ? (projDiffPct > 20 ? 'proj-danger' : projDiffPct > 0 ? 'proj-warn' : '')
+      : '';
+    const projPct = promAvg > 0 ? Math.min(150, Math.round(proyectado / promAvg * 100)) : 0;
+    const projHTML = `
+      <div class="proj-card ${projLevel}">
+        <div class="proj-label">${finished ? '💥 GASTO TOTAL DEL MES' : '🔮 PROYECCIÓN FIN DE MES'}</div>
+        <div class="proj-value">${fmt(proyectado)}</div>
+        <div class="proj-sub">
+          ${finished ? 'Mes cerrado.' : `Vas en <b>${fmt(gastoNeto)}</b> al día ${dayOfMonth} de ${lastDay}.`}
+          ${promAvg > 0
+            ? ` Promedio últimos ${promPrev3.length} meses: <b>${fmt(promAvg)}</b>${projDiffPct !== null
+              ? ` (${projDiffPct > 0 ? '↑' : projDiffPct < 0 ? '↓' : '='} ${projDiffPct > 0 ? '+' : ''}${projDiffPct}%)`
+              : ''}`
+            : ' (no hay datos previos para comparar)'}
+        </div>
+        ${promAvg > 0 ? `<div class="proj-progress"><div class="proj-progress-fill" style="width:${projPct}%"></div></div>` : ''}
+        ${promAvg > 0 ? `<div style="font-size:12px;color:var(--muted)">100% = promedio histórico</div>` : ''}
+      </div>`;
+
+    // ── 3. Presupuestos por categoría
+    const budgetCats = state.categorias.filter(c => c.es_gasto && catBudgets[c.id] > 0);
+    const budgetByCat = {}; d.by_category.forEach(c => { budgetByCat[c.categoria_id] = parseInt(c.total) || 0; });
+
+    let budgetHTML = '';
+    if (budgetCats.length === 0) {
+      budgetHTML = `<div class="empty" style="padding:16px;text-align:center">
+        Sin presupuestos definidos.<br>Toca <b>"Editar"</b> en cualquier categoría para asignarle un tope mensual.
+      </div>`;
+    } else {
+      budgetHTML = budgetCats.map(c => {
+        const spent = budgetByCat[c.id] || 0;
+        const limit = catBudgets[c.id];
+        const pct = Math.min(100, Math.round(spent / limit * 100));
+        const overPct = Math.round(spent / limit * 100);
+        const lvl = pct >= 100 ? 'over' : pct >= 70 ? 'warn' : 'ok';
+        return `
+          <div class="budget-row">
+            <div class="budget-row-header">
+              <div class="budget-row-icon">${mobImg(c.mob_id, c.icono, 22)}</div>
+              <span class="budget-row-name">${c.nombre}</span>
+              <span class="budget-row-amounts"><b>${fmtShort(spent)}</b> / ${fmtShort(limit)}</span>
+              <button class="budget-edit-btn" onclick="editBudget(${c.id})">✏️</button>
+            </div>
+            <div class="budget-bar"><div class="budget-bar-fill ${lvl}" style="width:${pct}%"></div></div>
+            <div class="budget-row-pct ${overPct > 100 ? 'over' : ''}">${overPct}% del presupuesto</div>
+          </div>`;
+      }).join('');
+    }
+    // Botón "agregar presupuesto" — abre selector de categoría
+    const catsSinBudget = state.categorias.filter(c => c.es_gasto && !catBudgets[c.id]);
+    const addBudgetBtn = catsSinBudget.length > 0
+      ? `<button class="budget-edit-btn" style="margin-top:8px;padding:8px 12px;font-size:7px;width:100%" onclick="addBudgetPrompt()">➕ AGREGAR PRESUPUESTO</button>`
+      : '';
+
+    // ── 4. Top comercios
+    const tops = topMerchants(movs, 10);
+    const topHTML = tops.length
+      ? tops.map((t, i) => `
+          <div class="top-row">
+            <span class="top-row-rank">#${i+1}</span>
+            <span class="top-row-name">${t.name}<span class="top-row-count">· ${t.count} ${t.count === 1 ? 'vez' : 'veces'}</span></span>
+            <span class="top-row-total">${fmt(t.total)}</span>
+          </div>`).join('')
+      : `<div class="empty" style="padding:16px">Sin movimientos este mes</div>`;
+
+    // ── 5. Heatmap día de la semana
+    const dow = dayOfWeekTotals(movs);
+    const maxDow = Math.max(1, ...dow);
+    const heatHTML = `<div class="heatmap-row">
+      ${DOW_NAMES.map((name, i) => {
+        const isPeak = dow[i] === maxDow && maxDow > 0;
+        return `<div class="heatmap-cell ${isPeak ? 'peak' : ''}">
+          <div class="heatmap-day">${name}</div>
+          <div class="heatmap-amt">${dow[i] > 0 ? fmtShort(dow[i]) : '—'}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+    // ── 6. Necesario vs Deseable
+    let totNec = 0, totDes = 0, totUnc = 0;
+    d.by_category.forEach(c => {
+      const cid = c.categoria_id ?? 0;
+      const v = parseInt(c.total) || 0;
+      const tipo = catNecDes[cid];
+      if (tipo === 'nec') totNec += v;
+      else if (tipo === 'des') totDes += v;
+      else totUnc += v;
+    });
+    const totND = totNec + totDes + totUnc;
+    const pctOf = v => totND > 0 ? Math.round(v / totND * 100) : 0;
+    const ndSummary = `<div class="nd-summary">
+      <div class="nd-card nec">
+        <div class="nd-label">✅ NECESARIO</div>
+        <div class="nd-amt">${fmt(totNec)}</div>
+        <div class="nd-pct">${pctOf(totNec)}% del total</div>
+      </div>
+      <div class="nd-card des">
+        <div class="nd-label">🎯 DESEABLE</div>
+        <div class="nd-amt">${fmt(totDes)}</div>
+        <div class="nd-pct">${pctOf(totDes)}% del total — acá puedes recortar</div>
+      </div>
+      ${totUnc > 0 ? `<div class="nd-card unc">
+        <div class="nd-label">❓ SIN CLASIFICAR — ${fmt(totUnc)}</div>
+        <div class="nd-pct">Marca abajo cada categoría como necesaria o deseable para mejor análisis</div>
+      </div>` : ''}
+    </div>`;
+
+    // Lista de categorías con pills para asignar
+    const ndCats = d.by_category.map(c => {
+      const cid = c.categoria_id ?? 0;
+      const tipo = catNecDes[cid];
+      return `<div class="nd-cat-row">
+        <div class="nd-cat-icon">${mobImg(c.mob_id, c.icono, 22)}</div>
+        <span class="nd-cat-name">${c.nombre} <span style="color:var(--muted);font-size:12px">${fmtShort(c.total)}</span></span>
+        <div class="nd-cat-tipo-pills">
+          <button class="nd-pill nec ${tipo === 'nec' ? 'active' : ''}" onclick="setNecDes(${cid}, 'nec')">NEC</button>
+          <button class="nd-pill des ${tipo === 'des' ? 'active' : ''}" onclick="setNecDes(${cid}, 'des')">DES</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // ── Render
+    el.innerHTML = `
+      <div class="plan-header">
+        <span class="plan-title">⚔️ ${periodTitle}</span>
+        <button class="plan-add-btn" onclick="abrirModalManual()">➕ GASTO</button>
+      </div>
+
+      ${projHTML}
+
+      <div class="section-title">💰 PRESUPUESTOS</div>
+      <div class="section-sub">Tope mensual por categoría. Verde &lt;70%, amarillo 70-99%, rojo cuando te pasas.</div>
+      <div class="budget-list">${budgetHTML}</div>
+      ${addBudgetBtn}
+
+      <div class="section-title" style="margin-top:22px">🏪 TOP COMERCIOS DEL MES</div>
+      <div class="section-sub">Dónde más gastaste. Útil para identificar gastos repetitivos.</div>
+      <div class="top-list">${topHTML}</div>
+
+      <div class="section-title" style="margin-top:22px">📅 GASTO POR DÍA DE LA SEMANA</div>
+      <div class="section-sub">Cuándo gastas más. El día rojo es tu pico.</div>
+      ${heatHTML}
+
+      <div class="section-title" style="margin-top:22px">⚖️ NECESARIO vs DESEABLE</div>
+      <div class="section-sub">Marca qué categorías son necesarias y cuáles deseables. Las deseables son tu blanco para reducir.</div>
+      ${ndSummary}
+      <div class="nd-cat-list">${ndCats}</div>
+    `;
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div class="error">Error cargando datos</div>`;
+  }
+}
+
+// ── Acciones PLAN ─────────────────────────────────────────────────────────────
+
+window.editBudget = (catId) => {
+  const cat = state.categorias.find(c => c.id === catId);
+  if (!cat) return;
+  const current = catBudgets[catId] || '';
+  const val = prompt(`Presupuesto mensual de "${cat.nombre}" en pesos\n(escribe 0 o vacío para borrarlo)`, current);
+  if (val === null) return;
+  const n = parseInt(val.replace(/\D/g,'')) || 0;
+  if (n <= 0) delete catBudgets[catId];
+  else catBudgets[catId] = n;
+  localStorage.setItem(BUDGETS_KEY, JSON.stringify(catBudgets));
+  loadPlan();
+};
+
+window.addBudgetPrompt = () => {
+  const sinBudget = state.categorias.filter(c => c.es_gasto && !catBudgets[c.id]);
+  if (sinBudget.length === 0) return;
+  const list = sinBudget.map((c, i) => `${i+1}. ${c.nombre}`).join('\n');
+  const idx = prompt(`Elegir categoría:\n${list}`, '1');
+  if (!idx) return;
+  const n = parseInt(idx) - 1;
+  if (n < 0 || n >= sinBudget.length) return;
+  editBudget(sinBudget[n].id);
+};
+
+window.setNecDes = (catId, tipo) => {
+  const key = String(catId);
+  if (catNecDes[key] === tipo) delete catNecDes[key];
+  else catNecDes[key] = tipo;
+  localStorage.setItem(NECDES_KEY, JSON.stringify(catNecDes));
+  loadPlan();
+};
+
+// ── Modal manual ──────────────────────────────────────────────────────────────
+
+window.abrirModalManual = () => {
+  // default fecha = hoy
+  const today = new Date();
+  const isoToday = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  $('manual-desc').value = '';
+  $('manual-monto').value = '';
+  $('manual-fecha').value = isoToday;
+  state._manualTipo = 'cargo';
+  document.querySelectorAll('.manual-tipo-btn').forEach(b => b.classList.toggle('active', b.dataset.tipo === 'cargo'));
+  $('modal-manual').classList.remove('hidden');
+};
+
+window.cerrarModalManual = () => $('modal-manual').classList.add('hidden');
+
+window.setManualTipo = (tipo) => {
+  state._manualTipo = tipo;
+  document.querySelectorAll('.manual-tipo-btn').forEach(b => b.classList.toggle('active', b.dataset.tipo === tipo));
+};
+
+window.guardarManual = async () => {
+  const desc = $('manual-desc').value.trim();
+  const monto = parseInt(($('manual-monto').value || '').replace(/\D/g,'')) || 0;
+  const fecha = $('manual-fecha').value || null;
+  const tipo = state._manualTipo || 'cargo';
+  if (!desc) { showToast('Falta descripción', true); return; }
+  if (monto <= 0) { showToast('Monto inválido', true); return; }
+  try {
+    await addManual({ descripcion: desc, monto, fecha, tipo });
+    showToast(`✓ ${tipo === 'cargo' ? 'Gasto' : 'Abono'} agregado: ${fmt(monto)}`);
+    cerrarModalManual();
+    if (state.tab === 'plan') loadPlan();
+  } catch (err) {
+    showToast('Error al guardar', true);
+  }
+};
 
 // ── Pantalla: Movimientos ─────────────────────────────────────────────────────
 async function loadMovimientos() {
@@ -931,6 +1267,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   $('modal-sync').addEventListener('click', e => {
     if (e.target === $('modal-sync')) cerrarModalSync();
+  });
+
+  $('modal-manual').addEventListener('click', e => {
+    if (e.target === $('modal-manual')) cerrarModalManual();
   });
 
   try { state.categorias = await getCategories(); } catch {}
