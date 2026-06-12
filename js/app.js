@@ -1,4 +1,4 @@
-import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory, addManual, deleteMovement } from './api.js';
+import { getSummary, getMovements, syncEmail, getCategories, setCategory, getYearlySummary, getYearlyCategoryBreakdown, createCategory, deleteCategory, addManual, deleteMovement, updateMovement } from './api.js';
 
 // ── Estado global ─────────────────────────────────────────────────────────────
 const state = {
@@ -1200,7 +1200,7 @@ window.abrirModalDesde = (movId) => {
   const montoEl = $('modal-monto');
   montoEl.textContent = `${mov.tipo === 'abono' ? '+' : '-'}${fmt(mov.monto)}`;
   montoEl.className = `modal-monto${mov.tipo === 'abono' ? ' modal-monto-abono' : ''}`;
-  $('modal-fecha').textContent = `📅 ${fmtFecha(mov.fecha)}`;
+  $('modal-fecha').innerHTML = `📅 <span id="modal-fecha-text">${fmtFecha(mov.fecha)}</span> <button class="modal-fecha-edit" onclick="editarFechaMov()">✏️ cambiar</button>`;
   $('modal-contador').textContent = mov.categoria
     ? `${mov.categoria.icono} ${mov.categoria.nombre}`
     : '❓ sin categoría';
@@ -1273,6 +1273,35 @@ window.omitirCategoria = () => {
   const next = state.movimientosList.slice(idx + 1).find(m => !m.categoria_id);
   if (next) abrirModalDesde(next.id);
   else { cerrarModal(); showToast('✓ Todo categorizado'); }
+};
+
+window.editarFechaMov = async () => {
+  const movId = window._currentMovId;
+  if (movId == null) return;
+  const mov = state.movimientosList.find(m => m.id === movId);
+  if (!mov) return;
+  const nueva = prompt(
+    `Cambiar fecha del movimiento\n` +
+    `"${cleanDesc(mov.descripcion)}" · ${fmt(mov.monto)}\n\n` +
+    `Fecha actual: ${mov.fecha}\n` +
+    `Nueva fecha en formato AAAA-MM-DD\n` +
+    `(ej: 2026-05-31 para moverlo al último día de mayo)`,
+    mov.fecha
+  );
+  if (!nueva) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(nueva)) {
+    showToast('Formato inválido — usa AAAA-MM-DD', true);
+    return;
+  }
+  try {
+    await updateMovement(movId, { fecha: nueva });
+    mov.fecha = nueva;
+    $('modal-fecha-text').textContent = fmtFecha(nueva);
+    showToast(`✓ Fecha cambiada a ${fmtFecha(nueva)}`);
+    renderMovimientos();
+  } catch {
+    showToast('Error al cambiar fecha', true);
+  }
 };
 
 window.eliminarMovActual = async () => {

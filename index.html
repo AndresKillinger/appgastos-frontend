@@ -985,7 +985,14 @@
     .modal-desc    { font-size: 18px; color: var(--text); margin-bottom: 4px; line-height: 1.4; }
     .modal-monto        { font-family: var(--fp); font-size: 16px; color: var(--red); text-shadow: var(--neon-red); margin-bottom: 4px; }
     .modal-monto-abono  { color: var(--green) !important; text-shadow: var(--neon-green) !important; }
-    .modal-fecha   { font-size: 15px; color: var(--muted); margin-bottom: 14px; }
+    .modal-fecha   { font-size: 15px; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .modal-fecha-edit {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--blue); font-family: var(--fp); font-size: 6px;
+      padding: 4px 8px; cursor: pointer; border-radius: 5px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .modal-fecha-edit:active { background: rgba(92,198,255,.1); }
 
     /* Grid de categorías */
     .cat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }

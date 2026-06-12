@@ -98,6 +98,15 @@ export async function deleteMovement(movId) {
   return r.json();
 }
 
+export async function updateMovement(movId, fields) {
+  const r = await fetch(`${BASE}/movements/${movId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  return r.json();
+}
+
 export async function addCreditCard({ fecha, descripcion, monto }) {
   const r = await fetch(`${BASE}/movements/credit-card`, {
     method: 'POST',
